@@ -45,31 +45,93 @@ Authorization: Bearer {accessToken}
 
 ## 회원가입
 
-### POST /auth/signup
+### POST /api/v1/auth/signup
 
-### Request
+인증이 필요하지 않은 공개 API입니다.
+
+#### Request
 
 ```json
+POST /api/v1/auth/signup
+Content-Type: application/json
+
 {
-  "email": "test@test.com",
-  "password": "1234",
-  "nickname": "kim"
+    "email": "user@example.com",
+    "password": "Password1!",
+    "nickname": "홍길동"
 }
 ```
 
-### Response
+#### Validation 규칙
+
+| 필드 | 제약 조건 |
+|---|---|
+| email | 필수, 이메일 형식, 최대 255자 |
+| password | 필수, 8~20자, 영문+숫자+특수문자 포함 |
+| nickname | 필수, 2~50자 |
+
+#### Success Response
+
+HTTP Status: **201 Created**
 
 ```json
 {
-  "userId": 1,
-  "email": "test@test.com"
+    "success": true,
+    "code": "USER_CREATED",
+    "message": "회원가입이 완료되었습니다.",
+    "data": {
+        "id": 1,
+        "email": "user@example.com",
+        "nickname": "홍길동"
+    }
 }
 ```
 
-### Validation
+#### Error Response - 이메일 중복
 
-- 이메일 중복 불가
-- 비밀번호 8자 이상
+HTTP Status: **409 Conflict**
+
+```json
+{
+    "success": false,
+    "code": "DUPLICATE_EMAIL",
+    "message": "이미 사용 중인 이메일입니다.",
+    "data": null
+}
+```
+
+#### Error Response - Validation 실패
+
+HTTP Status: **400 Bad Request**
+
+```json
+{
+    "success": false,
+    "code": "INVALID_INPUT_VALUE",
+    "message": "적절하지 않은 입력값입니다.",
+    "data": [
+        {
+            "field": "email",
+            "rejectedValue": "not-email",
+            "reason": "올바른 이메일 형식이 아닙니다."
+        },
+        {
+            "field": "password",
+            "rejectedValue": "1234",
+            "reason": "비밀번호는 8자 이상, 영문/숫자/특수문자를 포함해야 합니다."
+        }
+    ]
+}
+```
+
+#### HTTP Status 정리
+
+| 상황 | Status | Code |
+|---|---|---|
+| 회원가입 성공 | 201 Created | USER_CREATED |
+| Validation 실패 | 400 Bad Request | INVALID_INPUT_VALUE |
+| 이메일 중복 | 409 Conflict | DUPLICATE_EMAIL |
+| 서버 오류 | 500 Internal Server Error | INTERNAL_SERVER_ERROR |
 
 ---
 
