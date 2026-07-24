@@ -19,3 +19,14 @@ spring:
         format_sql: true
 server:
     port: 8081
+
+springdoc:
+  api-docs:
+    path: /v3/api-docs
+    enabled: ${SPRINGDOC_ENABLED:true}
+  swagger-ui:
+    path: /swagger-ui.html
+    enabled: ${SPRINGDOC_ENABLED:true}
+    operations-sorter: alpha
+  default-consumes-media-type: application/json
+  default-produces-media-type: application/json
