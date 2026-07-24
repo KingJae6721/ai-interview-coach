@@ -1,0 +1,19 @@
+# IDEs and editors
+.idea/
+.vscode/
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Build and local files
+**/build/
+**/.gradle/
+**/node_modules/
+**/.next/
+**/out/
