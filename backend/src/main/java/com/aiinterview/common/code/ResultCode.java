@@ -22,4 +22,3 @@ public enum ResultCode {
 
     private final String message;
 }
-
