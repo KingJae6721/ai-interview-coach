@@ -1,5 +1,7 @@
 package com.aiinterview.user.service;
 
+import com.aiinterview.user.dto.LoginRequest;
+import com.aiinterview.user.dto.LoginResponse;
 import com.aiinterview.user.dto.SignupRequest;
 import com.aiinterview.user.dto.SignupResponse;
 
@@ -20,4 +22,15 @@ public interface UserService {
      * @throws com.aiinterview.common.exception.BusinessException DUPLICATE_EMAIL - 이메일 중복 시
      */
     SignupResponse signup(SignupRequest request);
+
+    /**
+     * 로그인을 처리한다.
+     *
+     * @param request 로그인 요청 DTO (이메일, 비밀번호)
+     * @return 로그인 결과 DTO (id, 이메일, 닉네임, role)
+     * @throws com.aiinterview.common.exception.BusinessException USER_NOT_FOUND - 회원이 존재하지 않는 경우
+     * @throws com.aiinterview.common.exception.BusinessException INVALID_PASSWORD - 비밀번호가 틀린 경우
+     */
+    LoginResponse login(LoginRequest request);
 }
+

@@ -2,6 +2,8 @@ package com.aiinterview.user.service;
 
 import com.aiinterview.common.code.ErrorCode;
 import com.aiinterview.common.exception.BusinessException;
+import com.aiinterview.user.dto.LoginRequest;
+import com.aiinterview.user.dto.LoginResponse;
 import com.aiinterview.user.dto.SignupRequest;
 import com.aiinterview.user.dto.SignupResponse;
 import com.aiinterview.user.entity.AuthProvider;
@@ -85,4 +87,50 @@ public class UserServiceImpl implements UserService {
                 .nickname(savedUser.getNickname())
                 .build();
     }
+
+    /**
+     * 로그인을 처리한다.
+     *
+     * <p>조회만 수행하므로 트랜잭션 성능 최적화를 위해
+     * {@code @Transactional(readOnly = true)}를 적용한다.</p>
+     *
+     * @param request 로그인 요청 DTO
+     * @return 로그인 완료된 사용자 정보 DTO
+     * @throws BusinessException USER_NOT_FOUND - 회원이 존재하지 않는 경우
+     * @throws BusinessException INVALID_PASSWORD - 비밀번호가 일치하지 않는 경우
+     */
+    @Override
+    @Transactional(readOnly = true)
+    public LoginResponse login(LoginRequest request) {
+
+        // 1. 이메일로 회원 조회
+        User user = userRepository.findByEmail(request.getEmail())
+                .orElseThrow(() -> {
+                    log.error("Login failed - user not found: {}", request.getEmail());
+                    return new BusinessException(ErrorCode.USER_NOT_FOUND);
+                });
+
+        // 2. Soft Delete(탈퇴) 회원 체크
+        if (user.getStatus() == UserStatus.DELETED) {
+            log.error("Login failed - deleted user account: {}", request.getEmail());
+            throw new BusinessException(ErrorCode.USER_NOT_FOUND);
+        }
+
+        // 3. 비밀번호 일치 확인 (matches() 사용)
+        if (!passwordEncoder.matches(request.getPassword(), user.getPassword())) {
+            log.error("Login failed - invalid password for: {}", request.getEmail());
+            throw new BusinessException(ErrorCode.INVALID_PASSWORD);
+        }
+
+        log.info("Login completed - userId: {}, email: {}", user.getId(), user.getEmail());
+
+        // 4. Response DTO 반환 (Entity 반환 금지)
+        return LoginResponse.builder()
+                .id(user.getId())
+                .email(user.getEmail())
+                .nickname(user.getNickname())
+                .role(user.getRole())
+                .build();
+    }
 }
+
