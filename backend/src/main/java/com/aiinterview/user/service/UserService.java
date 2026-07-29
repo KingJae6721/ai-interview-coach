@@ -4,6 +4,7 @@ import com.aiinterview.user.dto.LoginRequest;
 import com.aiinterview.user.dto.LoginResponse;
 import com.aiinterview.user.dto.SignupRequest;
 import com.aiinterview.user.dto.SignupResponse;
+import com.aiinterview.user.dto.UserResponse;
 
 /**
  * 사용자 도메인 비즈니스 로직 인터페이스.
@@ -32,5 +33,15 @@ public interface UserService {
      * @throws com.aiinterview.common.exception.BusinessException INVALID_PASSWORD - 비밀번호가 틀린 경우
      */
     LoginResponse login(LoginRequest request);
+
+    /**
+     * 현재 로그인한 사용자의 정보를 조회한다.
+     *
+     * @param userId 회원 고유 ID
+     * @return 사용자 정보 DTO (id, email, nickname, role)
+     * @throws com.aiinterview.common.exception.BusinessException USER_NOT_FOUND - 회원이 존재하지 않거나 탈퇴한 경우
+     */
+    UserResponse getMyInfo(Long userId);
 }
+
 
