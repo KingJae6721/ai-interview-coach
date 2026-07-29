@@ -14,12 +14,18 @@ public class LoginResponse {
     private final String email;
     private final String nickname;
     private final UserRole role;
+    private final String accessToken;
+    private final String refreshToken;
+    private final String tokenType;
 
     @Builder
-    private LoginResponse(Long id, String email, String nickname, UserRole role) {
+    private LoginResponse(Long id, String email, String nickname, UserRole role, String accessToken, String refreshToken, String tokenType) {
         this.id = id;
         this.email = email;
         this.nickname = nickname;
         this.role = role;
+        this.accessToken = accessToken;
+        this.refreshToken = refreshToken;
+        this.tokenType = tokenType != null ? tokenType : "Bearer";
     }
 }

@@ -17,12 +17,15 @@ public class JwtProvider {
 
     private final SecretKey key;
     private final long expiration;
+    private final long refreshExpiration;
 
     public JwtProvider(
             @Value("${jwt.secret}") String secret,
-            @Value("${jwt.expiration}") long expiration) {
+            @Value("${jwt.expiration}") long expiration,
+            @Value("${jwt.refresh-expiration:1209600000}") long refreshExpiration) {
         this.key = Keys.hmacShaKeyFor(Decoders.BASE64.decode(secret));
         this.expiration = expiration;
+        this.refreshExpiration = refreshExpiration;
     }
 
     /**
@@ -43,6 +46,28 @@ public class JwtProvider {
                 .expiration(validity)
                 .signWith(key)
                 .compact();
+    }
+
+    /**
+     * Refresh Token을 생성한다.
+     *
+     * @param userId 회원 고유 ID (sub)
+     * @return 생성된 JWT Refresh Token 문자열 (14일 만료)
+     */
+    public String createRefreshToken(Long userId) {
+        Date now = new Date();
+        Date validity = new Date(now.getTime() + refreshExpiration);
+
+        return Jwts.builder()
+                .subject(String.valueOf(userId))
+                .issuedAt(now)
+                .expiration(validity)
+                .signWith(key)
+                .compact();
+    }
+
+    public long getRefreshExpirationSeconds() {
+        return refreshExpiration / 1000;
     }
 
     /**

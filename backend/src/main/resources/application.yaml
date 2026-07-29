@@ -8,6 +8,11 @@ spring:
     password: postgres
     driver-class-name: org.postgresql.Driver
 
+  data:
+    redis:
+      host: ${REDIS_HOST:localhost}
+      port: ${REDIS_PORT:6379}
+
   jpa:
     hibernate:
       ddl-auto: update
@@ -34,3 +39,4 @@ springdoc:
 jwt:
   secret: ${JWT_SECRET:c3ByaW5nLWJvb3QtYWktaW50ZXJ2aWV3LWNvYWNoLXBvcnRmb2xpby1zZWNyZXQta2V5LTMyei1ieXRlcy1sZW5ndGg=}
   expiration: 1800000 # 30 minutes (30 * 60 * 1000 ms)
+  refresh-expiration: 1209600000 # 14 days (14 * 24 * 60 * 60 * 1000 ms)

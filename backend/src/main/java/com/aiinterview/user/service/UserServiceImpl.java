@@ -1,11 +1,15 @@
 package com.aiinterview.user.service;
 
+import com.aiinterview.auth.JwtProvider;
+import com.aiinterview.auth.RefreshToken;
+import com.aiinterview.auth.RefreshTokenRepository;
 import com.aiinterview.common.code.ErrorCode;
 import com.aiinterview.common.exception.BusinessException;
 import com.aiinterview.user.dto.LoginRequest;
 import com.aiinterview.user.dto.LoginResponse;
 import com.aiinterview.user.dto.SignupRequest;
 import com.aiinterview.user.dto.SignupResponse;
+import com.aiinterview.user.dto.UserResponse;
 import com.aiinterview.user.entity.AuthProvider;
 import com.aiinterview.user.entity.User;
 import com.aiinterview.user.entity.UserRole;
@@ -19,19 +23,6 @@ import org.springframework.transaction.annotation.Transactional;
 
 /**
  * 사용자 도메인 비즈니스 로직 구현체.
- *
- * <p>회원가입 처리 흐름:</p>
- * <ol>
- *     <li>이메일 중복 검사 ({@link UserRepository#existsByEmail})</li>
- *     <li>중복 시 {@link ErrorCode#DUPLICATE_EMAIL} 예외 발생</li>
- *     <li>비밀번호 BCrypt 암호화 ({@link PasswordEncoder#encode})</li>
- *     <li>{@link User} 엔티티 생성 (Builder 패턴)</li>
- *     <li>{@link UserRepository#save} 를 통한 DB 저장</li>
- *     <li>{@link SignupResponse} 반환</li>
- * </ol>
- *
- * <p>Controller는 이 Service만 호출하며,
- * Repository에는 비즈니스 로직이 존재하지 않는다.</p>
  */
 @Slf4j
 @Service
@@ -40,13 +31,11 @@ public class UserServiceImpl implements UserService {
 
     private final UserRepository userRepository;
     private final PasswordEncoder passwordEncoder;
+    private final JwtProvider jwtProvider;
+    private final RefreshTokenRepository refreshTokenRepository;
 
     /**
      * 회원가입을 처리한다.
-     *
-     * <p>신규 회원이므로 쓰기 트랜잭션(@Transactional)을 적용한다.
-     * 이메일 중복 검사부터 DB 저장까지 하나의 트랜잭션으로 묶어
-     * 데이터 정합성을 보장한다.</p>
      *
      * @param request 회원가입 요청 DTO
      * @return 생성된 사용자 정보 DTO
@@ -91,16 +80,13 @@ public class UserServiceImpl implements UserService {
     /**
      * 로그인을 처리한다.
      *
-     * <p>조회만 수행하므로 트랜잭션 성능 최적화를 위해
-     * {@code @Transactional(readOnly = true)}를 적용한다.</p>
-     *
      * @param request 로그인 요청 DTO
-     * @return 로그인 완료된 사용자 정보 DTO
+     * @return 로그인 완료된 사용자 정보, AccessToken 및 RefreshToken DTO
      * @throws BusinessException USER_NOT_FOUND - 회원이 존재하지 않는 경우
      * @throws BusinessException INVALID_PASSWORD - 비밀번호가 일치하지 않는 경우
      */
     @Override
-    @Transactional(readOnly = true)
+    @Transactional
     public LoginResponse login(LoginRequest request) {
 
         // 1. 이메일로 회원 조회
@@ -122,15 +108,66 @@ public class UserServiceImpl implements UserService {
             throw new BusinessException(ErrorCode.INVALID_PASSWORD);
         }
 
+        // 4. JWT AccessToken & RefreshToken 생성
+        String accessToken = jwtProvider.createAccessToken(user.getId(), user.getRole());
+        String refreshToken = jwtProvider.createRefreshToken(user.getId());
+
+        // 5. RefreshToken Redis 저장
+        RefreshToken redisToken = RefreshToken.builder()
+                .userId(user.getId())
+                .token(refreshToken)
+                .ttl(jwtProvider.getRefreshExpirationSeconds())
+                .build();
+        refreshTokenRepository.save(redisToken);
+
         log.info("Login completed - userId: {}, email: {}", user.getId(), user.getEmail());
 
-        // 4. Response DTO 반환 (Entity 반환 금지)
+        // 6. Response DTO 반환
         return LoginResponse.builder()
+                .id(user.getId())
+                .email(user.getEmail())
+                .nickname(user.getNickname())
+                .role(user.getRole())
+                .accessToken(accessToken)
+                .refreshToken(refreshToken)
+                .tokenType("Bearer")
+                .build();
+    }
+
+    /**
+     * 현재 로그인한 사용자의 정보를 조회한다.
+     *
+     * @param userId 회원 고유 ID
+     * @return 사용자 정보 DTO
+     * @throws BusinessException USER_NOT_FOUND - 회원이 존재하지 않거나 탈퇴한 경우
+     */
+    @Override
+    @Transactional(readOnly = true)
+    public UserResponse getMyInfo(Long userId) {
+
+        // 1. 회원 조회
+        User user = userRepository.findById(userId)
+                .orElseThrow(() -> {
+                    log.error("GetMyInfo failed - user not found: {}", userId);
+                    return new BusinessException(ErrorCode.USER_NOT_FOUND);
+                });
+
+        // 2. Soft Delete(탈퇴) 회원 체크
+        if (user.getStatus() == UserStatus.DELETED) {
+            log.error("GetMyInfo failed - deleted user account: {}", requestUserId(userId));
+            throw new BusinessException(ErrorCode.USER_NOT_FOUND);
+        }
+
+        // 3. UserResponse 반환 (비밀번호 등 민감정보 제외)
+        return UserResponse.builder()
                 .id(user.getId())
                 .email(user.getEmail())
                 .nickname(user.getNickname())
                 .role(user.getRole())
                 .build();
     }
-}
 
+    private String requestUserId(Long userId) {
+        return String.valueOf(userId);
+    }
+}

@@ -1,5 +1,6 @@
 package com.aiinterview.user.service;
 
+import com.aiinterview.auth.JwtProvider;
 import com.aiinterview.common.code.ErrorCode;
 import com.aiinterview.common.exception.BusinessException;
 import com.aiinterview.user.dto.SignupRequest;
@@ -32,6 +33,12 @@ class UserServiceTest {
 
     @Mock
     private PasswordEncoder passwordEncoder;
+
+    @Mock
+    private JwtProvider jwtProvider;
+
+    @Mock
+    private com.aiinterview.auth.RefreshTokenRepository refreshTokenRepository;
 
     @Test
     @DisplayName("TC-01: 회원가입 성공")
@@ -126,5 +133,80 @@ class UserServiceTest {
         // then & verify
         verify(passwordEncoder, times(1)).encode(request.getPassword());
         verify(userRepository, times(1)).save(any(User.class));
+    }
+
+    @Test
+    @DisplayName("TC-04: 로그인 성공 및 AccessToken 발급")
+    void login_Success() {
+        // given
+        com.aiinterview.user.dto.LoginRequest request = com.aiinterview.user.dto.LoginRequest.builder()
+                .email("test@test.com")
+                .password("1234Abcd!")
+                .build();
+
+        User user = User.builder()
+                .email("test@test.com")
+                .password("encodedPassword")
+                .nickname("홍길동")
+                .role(com.aiinterview.user.entity.UserRole.USER)
+                .status(com.aiinterview.user.entity.UserStatus.ACTIVE)
+                .build();
+        ReflectionTestUtils.setField(user, "id", 1L);
+
+        given(userRepository.findByEmail(request.getEmail())).willReturn(java.util.Optional.of(user));
+        given(passwordEncoder.matches(request.getPassword(), user.getPassword())).willReturn(true);
+        given(jwtProvider.createAccessToken(1L, com.aiinterview.user.entity.UserRole.USER))
+                .willReturn("mockedAccessToken");
+        given(jwtProvider.createRefreshToken(1L)).willReturn("mockedRefreshToken");
+        given(jwtProvider.getRefreshExpirationSeconds()).willReturn(1209600L);
+
+        // when
+        com.aiinterview.user.dto.LoginResponse response = userService.login(request);
+
+        // then
+        assertThat(response).isNotNull();
+        assertThat(response.getId()).isEqualTo(1L);
+        assertThat(response.getEmail()).isEqualTo("test@test.com");
+        assertThat(response.getNickname()).isEqualTo("홍길동");
+        assertThat(response.getAccessToken()).isEqualTo("mockedAccessToken");
+        assertThat(response.getRefreshToken()).isEqualTo("mockedRefreshToken");
+        assertThat(response.getTokenType()).isEqualTo("Bearer");
+
+        // verify
+        verify(userRepository, times(1)).findByEmail(request.getEmail());
+        verify(passwordEncoder, times(1)).matches(request.getPassword(), user.getPassword());
+        verify(jwtProvider, times(1)).createAccessToken(1L, com.aiinterview.user.entity.UserRole.USER);
+        verify(jwtProvider, times(1)).createRefreshToken(1L);
+        verify(refreshTokenRepository, times(1)).save(any());
+    }
+
+    @Test
+    @DisplayName("TC-05: 로그인 실패 - 비밀번호 불일치")
+    void login_Fail_InvalidPassword() {
+        // given
+        com.aiinterview.user.dto.LoginRequest request = com.aiinterview.user.dto.LoginRequest.builder()
+                .email("test@test.com")
+                .password("wrongPassword!")
+                .build();
+
+        User user = User.builder()
+                .email("test@test.com")
+                .password("encodedPassword")
+                .nickname("홍길동")
+                .role(com.aiinterview.user.entity.UserRole.USER)
+                .status(com.aiinterview.user.entity.UserStatus.ACTIVE)
+                .build();
+        ReflectionTestUtils.setField(user, "id", 1L);
+
+        given(userRepository.findByEmail(request.getEmail())).willReturn(java.util.Optional.of(user));
+        given(passwordEncoder.matches(request.getPassword(), user.getPassword())).willReturn(false);
+
+        // when & then
+        BusinessException exception = assertThrows(BusinessException.class, () -> {
+            userService.login(request);
+        });
+
+        assertThat(exception.getErrorCode()).isEqualTo(ErrorCode.INVALID_PASSWORD);
+        verify(jwtProvider, never()).createAccessToken(any(), any());
     }
 }
