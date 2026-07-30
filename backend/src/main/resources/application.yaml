@@ -40,3 +40,8 @@ jwt:
   secret: ${JWT_SECRET:c3ByaW5nLWJvb3QtYWktaW50ZXJ2aWV3LWNvYWNoLXBvcnRmb2xpby1zZWNyZXQta2V5LTMyei1ieXRlcy1sZW5ndGg=}
   expiration: 1800000 # 30 minutes (30 * 60 * 1000 ms)
   refresh-expiration: 1209600000 # 14 days (14 * 24 * 60 * 60 * 1000 ms)
+
+openai:
+  base-url: ${OPENAI_BASE_URL:https://api.openai.com/v1}
+  api-key: ${OPENAI_API_KEY:}
+  model: ${OPENAI_MODEL:gpt-4o-mini}

@@ -10,11 +10,13 @@ public class InterviewCreateResponse {
     private final Long interviewId;
     private final String title;
     private final InterviewStatus status;
+    private final int questionCount;
 
     @Builder
-    public InterviewCreateResponse(Long interviewId, String title, InterviewStatus status) {
+    public InterviewCreateResponse(Long interviewId, String title, InterviewStatus status, int questionCount) {
         this.interviewId = interviewId;
         this.title = title;
         this.status = status;
+        this.questionCount = questionCount;
     }
 }
