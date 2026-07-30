@@ -50,4 +50,9 @@ public class InterviewAnswer extends BaseEntity {
         this.answerContent = answerContent;
         this.answeredAt = answeredAt;
     }
+
+    public void updateAnswer(String answerContent, LocalDateTime answeredAt) {
+        this.answerContent = answerContent;
+        this.answeredAt = answeredAt;
+    }
 }

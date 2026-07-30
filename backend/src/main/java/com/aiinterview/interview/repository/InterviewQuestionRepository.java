@@ -8,4 +8,6 @@ import java.util.List;
 public interface InterviewQuestionRepository extends JpaRepository<InterviewQuestion, Long> {
 
     List<InterviewQuestion> findByInterviewIdOrderByQuestionOrderAsc(Long interviewId);
+
+    long countByInterviewId(Long interviewId);
 }

@@ -34,10 +34,11 @@ public enum ErrorCode {
     INTERVIEW_QUESTION_NOT_FOUND(HttpStatus.NOT_FOUND, "Interview question not found."),
     INTERVIEW_ANSWER_ALREADY_EXISTS(HttpStatus.CONFLICT, "An answer already exists for this interview question."),
 
+    INTERVIEW_NOT_COMPLETABLE(HttpStatus.CONFLICT, "All interview questions must be answered before completion."),
+
     // AI
     AI_REQUEST_FAILED(HttpStatus.BAD_GATEWAY, "AI 서버 요청에 실패했습니다.");
 
     private final HttpStatus status;
     private final String message;
 }
-

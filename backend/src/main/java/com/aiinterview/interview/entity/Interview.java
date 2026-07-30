@@ -18,6 +18,8 @@ import lombok.Builder;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 
+import java.time.LocalDateTime;
+
 @Entity
 @Table(name = "interviews")
 @Getter
@@ -39,10 +41,26 @@ public class Interview extends BaseEntity {
     @Column(nullable = false, length = 20)
     private InterviewStatus status;
 
+    @Column(name = "completed_at")
+    private LocalDateTime completedAt;
+
     @Builder
     private Interview(User user, String title, InterviewStatus status) {
         this.user = user;
         this.title = title;
         this.status = status == null ? InterviewStatus.READY : status;
+    }
+
+    public void start() {
+        if (status == InterviewStatus.READY) {
+            this.status = InterviewStatus.IN_PROGRESS;
+        }
+    }
+
+    public void complete() {
+        if (status != InterviewStatus.COMPLETED) {
+            this.status = InterviewStatus.COMPLETED;
+            this.completedAt = LocalDateTime.now();
+        }
     }
 }
