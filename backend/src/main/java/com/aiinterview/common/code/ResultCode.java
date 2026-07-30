@@ -14,6 +14,7 @@ public enum ResultCode {
     USER_CREATED("회원가입이 완료되었습니다."),
     LOGIN_SUCCESS("로그인이 완료되었습니다."),
     TOKEN_REISSUED("토큰이 재발급되었습니다."),
+    LOGOUT_SUCCESS("로그아웃이 완료되었습니다."),
 
     // Interview
     INTERVIEW_CREATED("면접이 생성되었습니다."),

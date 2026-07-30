@@ -4,6 +4,8 @@ import com.aiinterview.common.code.ResultCode;
 import com.aiinterview.common.dto.ApiResponse;
 import com.aiinterview.user.dto.LoginRequest;
 import com.aiinterview.user.dto.LoginResponse;
+import com.aiinterview.user.dto.ReissueRequest;
+import com.aiinterview.user.dto.ReissueResponse;
 import com.aiinterview.user.dto.SignupRequest;
 import com.aiinterview.user.dto.SignupResponse;
 import com.aiinterview.user.service.UserService;
@@ -21,6 +23,7 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.bind.annotation.RequestHeader;
 
 /**
  * 인증 관련 REST API Controller.
@@ -143,5 +146,54 @@ public class AuthController {
         return ResponseEntity
                 .status(HttpStatus.OK)
                 .body(ApiResponse.success(ResultCode.LOGIN_SUCCESS, response));
+    }
+
+    /**
+     * Access Token 재발급 API.
+     *
+     * <p>Refresh Token의 서명 및 만료를 서버에서 검증하고,
+     * Redis에 저장된 토큰과 일치하는 경우에만 새 AccessToken을 발급한다.</p>
+     *
+     * @param request Refresh Token 요청 DTO
+     * @return 200 OK + 새로 발급된 AccessToken
+     */
+    @Operation(
+            summary = "Access Token 재발급",
+            description = "Refresh Token을 검증하고 새 Access Token을 발급합니다."
+    )
+    @ApiResponses(value = {
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                    responseCode = "200",
+                    description = "Access Token 재발급 성공",
+                    content = @Content(schema = @Schema(implementation = ReissueResponse.class))
+            ),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                    responseCode = "401",
+                    description = "Refresh Token 유효하지 않음 (만료, 요청 실패 등)"
+            )
+    })
+    @PostMapping("/reissue")
+    public ResponseEntity<ApiResponse<ReissueResponse>> reissue(
+            @RequestBody @Valid ReissueRequest request) {
+
+        log.info("Reissue request received");
+
+        ReissueResponse response = userService.reissue(request);
+
+        return ResponseEntity
+                .status(HttpStatus.OK)
+                .body(ApiResponse.success(ResultCode.TOKEN_REISSUED, response));
+    }
+
+    @Operation(summary = "로그아웃", description = "Refresh Token을 삭제하고 현재 Access Token을 만료 시점까지 블랙리스트에 등록합니다.")
+    @PostMapping("/logout")
+    public ResponseEntity<ApiResponse<Void>> logout(
+            @RequestHeader(value = "Authorization", required = false) String authorizationHeader) {
+
+        userService.logout(authorizationHeader);
+
+        return ResponseEntity
+                .status(HttpStatus.OK)
+                .body(ApiResponse.success(ResultCode.LOGOUT_SUCCESS, null));
     }
 }

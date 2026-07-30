@@ -10,6 +10,7 @@ import org.springframework.stereotype.Component;
 
 import javax.crypto.SecretKey;
 import java.util.Date;
+import java.util.UUID;
 
 @Slf4j
 @Component
@@ -60,6 +61,7 @@ public class JwtProvider {
 
         return Jwts.builder()
                 .subject(String.valueOf(userId))
+                .id(UUID.randomUUID().toString())
                 .issuedAt(now)
                 .expiration(validity)
                 .signWith(key)
@@ -68,6 +70,14 @@ public class JwtProvider {
 
     public long getRefreshExpirationSeconds() {
         return refreshExpiration / 1000;
+    }
+
+    /**
+     * 유효한 Access Token의 남은 만료 시간을 밀리초 단위로 반환한다.
+     */
+    public long getRemainingExpirationMillis(String token) {
+        long remaining = getClaims(token).getExpiration().getTime() - System.currentTimeMillis();
+        return Math.max(remaining, 0);
     }
 
     /**

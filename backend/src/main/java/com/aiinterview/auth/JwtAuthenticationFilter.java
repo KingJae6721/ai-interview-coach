@@ -28,6 +28,7 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
 
     private final JwtProvider jwtProvider;
     private final CustomUserDetailsService userDetailsService;
+    private final BlacklistedAccessTokenRepository blacklistedAccessTokenRepository;
 
     @Override
     protected void doFilterInternal(HttpServletRequest request, HttpServletResponse response, FilterChain filterChain)
@@ -35,7 +36,9 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
 
         String token = resolveToken(request);
 
-        if (StringUtils.hasText(token) && jwtProvider.validateToken(token)) {
+        if (StringUtils.hasText(token)
+                && jwtProvider.validateToken(token)
+                && !blacklistedAccessTokenRepository.existsById(token)) {
             try {
                 Long userId = jwtProvider.getUserId(token);
                 UserDetails userDetails = userDetailsService.loadUserById(userId);
@@ -56,7 +59,9 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
     @Override
     protected boolean shouldNotFilter(HttpServletRequest request) throws ServletException {
         String path = request.getRequestURI();
-        return path.startsWith("/api/v1/auth/") ||
+        return path.startsWith("/api/v1/auth/signup") ||
+               path.startsWith("/api/v1/auth/login") ||
+               path.startsWith("/api/v1/auth/reissue") ||
                path.startsWith("/swagger-ui/") ||
                path.startsWith("/v3/api-docs") ||
                path.startsWith("/h2-console/");

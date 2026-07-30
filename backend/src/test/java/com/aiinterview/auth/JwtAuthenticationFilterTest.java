@@ -30,6 +30,9 @@ class JwtAuthenticationFilterTest {
     private CustomUserDetailsService userDetailsService;
 
     @Mock
+    private BlacklistedAccessTokenRepository blacklistedAccessTokenRepository;
+
+    @Mock
     private HttpServletRequest request;
 
     @Mock
@@ -54,6 +57,7 @@ class JwtAuthenticationFilterTest {
         given(request.getHeader("Authorization")).willReturn("Bearer " + token);
         given(request.getRequestURI()).willReturn("/api/v1/users/me");
         given(jwtProvider.validateToken(token)).willReturn(true);
+        given(blacklistedAccessTokenRepository.existsById(token)).willReturn(false);
         given(jwtProvider.getUserId(token)).willReturn(1L);
         given(userDetailsService.loadUserById(1L)).willReturn(userDetails);
 
@@ -63,6 +67,22 @@ class JwtAuthenticationFilterTest {
         // then
         assertThat(SecurityContextHolder.getContext().getAuthentication()).isNotNull();
         verify(filterChain, times(1)).doFilter(request, response);
+    }
+
+    @Test
+    @DisplayName("블랙리스트 Access Token은 인증 정보를 설정하지 않는다")
+    void doFilterInternal_BlacklistedToken_SkipAuthentication() throws Exception {
+        String token = "blacklistedAccessToken";
+        given(request.getHeader("Authorization")).willReturn("Bearer " + token);
+        given(request.getRequestURI()).willReturn("/api/v1/users/me");
+        given(jwtProvider.validateToken(token)).willReturn(true);
+        given(blacklistedAccessTokenRepository.existsById(token)).willReturn(true);
+
+        jwtAuthenticationFilter.doFilter(request, response, filterChain);
+
+        assertThat(SecurityContextHolder.getContext().getAuthentication()).isNull();
+        verify(userDetailsService, never()).loadUserById(anyLong());
+        verify(filterChain).doFilter(request, response);
     }
 
     @Test

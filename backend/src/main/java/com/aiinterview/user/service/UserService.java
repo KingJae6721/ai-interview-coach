@@ -2,6 +2,8 @@ package com.aiinterview.user.service;
 
 import com.aiinterview.user.dto.LoginRequest;
 import com.aiinterview.user.dto.LoginResponse;
+import com.aiinterview.user.dto.ReissueRequest;
+import com.aiinterview.user.dto.ReissueResponse;
 import com.aiinterview.user.dto.SignupRequest;
 import com.aiinterview.user.dto.SignupResponse;
 import com.aiinterview.user.dto.UserResponse;
@@ -42,6 +44,21 @@ public interface UserService {
      * @throws com.aiinterview.common.exception.BusinessException USER_NOT_FOUND - 회원이 존재하지 않거나 탈퇴한 경우
      */
     UserResponse getMyInfo(Long userId);
-}
 
+    /**
+     * Refresh Token을 검증하고 새 Access Token을 발급한다.
+     *
+     * @param request Refresh Token 요청 DTO
+     * @return 재발급된 Access Token DTO
+     * @throws com.aiinterview.common.exception.BusinessException INVALID_TOKEN - Refresh Token이 유효하지 않은 경우
+     */
+    ReissueResponse reissue(ReissueRequest request);
+
+    /**
+     * 현재 Access Token을 폐기하고 사용자의 Refresh Token을 Redis에서 삭제한다.
+     *
+     * @param authorizationHeader Authorization 헤더 값
+     */
+    void logout(String authorizationHeader);
+}
 

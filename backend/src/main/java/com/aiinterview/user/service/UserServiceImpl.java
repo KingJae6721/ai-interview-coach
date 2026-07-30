@@ -1,12 +1,16 @@
 package com.aiinterview.user.service;
 
 import com.aiinterview.auth.JwtProvider;
+import com.aiinterview.auth.BlacklistedAccessToken;
+import com.aiinterview.auth.BlacklistedAccessTokenRepository;
 import com.aiinterview.auth.RefreshToken;
 import com.aiinterview.auth.RefreshTokenRepository;
 import com.aiinterview.common.code.ErrorCode;
 import com.aiinterview.common.exception.BusinessException;
 import com.aiinterview.user.dto.LoginRequest;
 import com.aiinterview.user.dto.LoginResponse;
+import com.aiinterview.user.dto.ReissueRequest;
+import com.aiinterview.user.dto.ReissueResponse;
 import com.aiinterview.user.dto.SignupRequest;
 import com.aiinterview.user.dto.SignupResponse;
 import com.aiinterview.user.dto.UserResponse;
@@ -33,6 +37,7 @@ public class UserServiceImpl implements UserService {
     private final PasswordEncoder passwordEncoder;
     private final JwtProvider jwtProvider;
     private final RefreshTokenRepository refreshTokenRepository;
+    private final BlacklistedAccessTokenRepository blacklistedAccessTokenRepository;
 
     /**
      * 회원가입을 처리한다.
@@ -169,5 +174,116 @@ public class UserServiceImpl implements UserService {
 
     private String requestUserId(Long userId) {
         return String.valueOf(userId);
+    }
+
+    /**
+     * Refresh Token을 검증하고 새 Access Token을 재발급한다.
+     *
+     * <p>처리 흐름:</p>
+     * <ol>
+     *     <li>JwtProvider로 토큰 서명/만료 검증</li>
+     *     <li>Redis에서 저장된 RefreshToken 조회</li>
+     *     <li>수신된 토큰과 Redis 토큰 일치 여부 확인</li>
+     *     <li>userId로 회원 조회 후 새 AccessToken 생성</li>
+     * </ol>
+     *
+     * @param request ReissueRequest (refreshToken)
+     * @return 재발급된 AccessToken DTO
+     * @throws BusinessException INVALID_TOKEN - 토큰이 유효하지 않거나 Redis에 없는 경우
+     */
+    @Override
+    @Transactional
+    public ReissueResponse reissue(ReissueRequest request) {
+
+        String refreshToken = request.getRefreshToken();
+
+        // 1. Refresh Token 서명/만료 검증
+        if (!jwtProvider.validateToken(refreshToken)) {
+            log.error("Reissue failed - invalid refresh token");
+            throw new BusinessException(ErrorCode.INVALID_TOKEN);
+        }
+
+        // 2. userId 추출
+        Long userId = jwtProvider.getUserId(refreshToken);
+
+        // 3. Redis에서 저장된 RefreshToken 조회
+        RefreshToken storedToken = refreshTokenRepository.findById(userId)
+                .orElseThrow(() -> {
+                    log.error("Reissue failed - refresh token not found in Redis, userId: {}", userId);
+                    return new BusinessException(ErrorCode.INVALID_TOKEN);
+                });
+
+        // 4. 수신된 토큰과 Redis 토큰 일치 확인
+        if (!storedToken.getToken().equals(refreshToken)) {
+            log.error("Reissue failed - refresh token mismatch, userId: {}", userId);
+            throw new BusinessException(ErrorCode.INVALID_TOKEN);
+        }
+
+        // 5. 회원 조회
+        User user = userRepository.findById(userId)
+                .orElseThrow(() -> {
+                    log.error("Reissue failed - user not found: {}", userId);
+                    return new BusinessException(ErrorCode.USER_NOT_FOUND);
+                });
+
+        // 6. 새 AccessToken 발급
+        refreshTokenRepository.deleteById(userId);
+
+        String newAccessToken = jwtProvider.createAccessToken(user.getId(), user.getRole());
+        String newRefreshToken = jwtProvider.createRefreshToken(user.getId());
+
+        refreshTokenRepository.save(RefreshToken.builder()
+                .userId(userId)
+                .token(newRefreshToken)
+                .ttl(jwtProvider.getRefreshExpirationSeconds())
+                .build());
+
+        log.info("Reissue completed - userId: {}", userId);
+
+        return ReissueResponse.builder()
+                .accessToken(newAccessToken)
+                .refreshToken(newRefreshToken)
+                .tokenType("Bearer")
+                .build();
+    }
+
+    @Override
+    @Transactional
+    public void logout(String authorizationHeader) {
+        String accessToken = extractBearerToken(authorizationHeader);
+
+        if (!jwtProvider.validateToken(accessToken)
+                || blacklistedAccessTokenRepository.existsById(accessToken)) {
+            log.error("Logout failed - invalid access token");
+            throw new BusinessException(ErrorCode.INVALID_TOKEN);
+        }
+
+        Long userId = jwtProvider.getUserId(accessToken);
+        long remainingExpirationMillis = jwtProvider.getRemainingExpirationMillis(accessToken);
+
+        if (remainingExpirationMillis <= 0) {
+            log.error("Logout failed - expired access token, userId: {}", userId);
+            throw new BusinessException(ErrorCode.INVALID_TOKEN);
+        }
+
+        refreshTokenRepository.deleteById(userId);
+        blacklistedAccessTokenRepository.save(BlacklistedAccessToken.builder()
+                .token(accessToken)
+                .ttl(remainingExpirationMillis)
+                .build());
+
+        log.info("Logout completed - userId: {}", userId);
+    }
+
+    private String extractBearerToken(String authorizationHeader) {
+        if (authorizationHeader == null || !authorizationHeader.startsWith("Bearer ")) {
+            throw new BusinessException(ErrorCode.INVALID_TOKEN);
+        }
+
+        String accessToken = authorizationHeader.substring("Bearer ".length());
+        if (accessToken.isBlank()) {
+            throw new BusinessException(ErrorCode.INVALID_TOKEN);
+        }
+        return accessToken;
     }
 }

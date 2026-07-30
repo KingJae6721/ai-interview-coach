@@ -4,6 +4,7 @@ import com.aiinterview.user.entity.UserRole;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+import com.aiinterview.auth.JwtProvider;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -15,7 +16,7 @@ class JwtProviderTest {
 
     @BeforeEach
     void setUp() {
-        jwtProvider = new JwtProvider(secret, expiration);
+        jwtProvider = new JwtProvider(secret, expiration, 1209600000L);
     }
 
     @Test
