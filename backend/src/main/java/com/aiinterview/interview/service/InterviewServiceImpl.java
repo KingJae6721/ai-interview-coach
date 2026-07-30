@@ -3,6 +3,7 @@ package com.aiinterview.interview.service;
 import com.aiinterview.common.code.ErrorCode;
 import com.aiinterview.common.exception.BusinessException;
 import com.aiinterview.interview.dto.InterviewCreateResponse;
+import com.aiinterview.interview.dto.InterviewCreateRequest;
 import com.aiinterview.interview.entity.Interview;
 import com.aiinterview.interview.entity.InterviewStatus;
 import com.aiinterview.interview.repository.InterviewRepository;
@@ -21,17 +22,19 @@ public class InterviewServiceImpl implements InterviewService {
 
     @Override
     @Transactional
-    public InterviewCreateResponse createInterview(Long userId) {
+    public InterviewCreateResponse createInterview(Long userId, InterviewCreateRequest request) {
         User user = userRepository.findById(userId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.USER_NOT_FOUND));
 
         Interview interview = interviewRepository.save(Interview.builder()
                 .user(user)
+                .title(request.getTitle())
                 .status(InterviewStatus.READY)
                 .build());
 
         return InterviewCreateResponse.builder()
                 .interviewId(interview.getId())
+                .title(interview.getTitle())
                 .status(interview.getStatus())
                 .build();
     }

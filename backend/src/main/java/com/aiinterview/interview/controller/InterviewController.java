@@ -4,12 +4,15 @@ import com.aiinterview.auth.CustomUserDetails;
 import com.aiinterview.common.code.ResultCode;
 import com.aiinterview.common.dto.ApiResponse;
 import com.aiinterview.interview.dto.InterviewCreateResponse;
+import com.aiinterview.interview.dto.InterviewCreateRequest;
+import jakarta.validation.Valid;
 import com.aiinterview.interview.service.InterviewService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
@@ -22,9 +25,10 @@ public class InterviewController {
 
     @PostMapping
     public ResponseEntity<ApiResponse<InterviewCreateResponse>> createInterview(
-            @AuthenticationPrincipal CustomUserDetails userDetails) {
+            @AuthenticationPrincipal CustomUserDetails userDetails,
+            @RequestBody @Valid InterviewCreateRequest request) {
 
-        InterviewCreateResponse response = interviewService.createInterview(userDetails.getId());
+        InterviewCreateResponse response = interviewService.createInterview(userDetails.getId(), request);
 
         return ResponseEntity.status(HttpStatus.CREATED)
                 .body(ApiResponse.success(ResultCode.INTERVIEW_CREATED, response));

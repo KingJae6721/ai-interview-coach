@@ -32,13 +32,17 @@ public class Interview extends BaseEntity {
     @JoinColumn(name = "user_id", nullable = false)
     private User user;
 
+    @Column(nullable = false, length = 100)
+    private String title;
+
     @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 20)
     private InterviewStatus status;
 
     @Builder
-    private Interview(User user, InterviewStatus status) {
+    private Interview(User user, String title, InterviewStatus status) {
         this.user = user;
+        this.title = title;
         this.status = status == null ? InterviewStatus.READY : status;
     }
 }
