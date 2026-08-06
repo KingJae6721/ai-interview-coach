@@ -485,6 +485,71 @@ Feedback 생성
 
 ---
 
+## Interview Feedback Generate
+
+### POST /interviews/{interviewId}/feedback
+
+Completed interview owners can generate one aggregate AI feedback result.
+
+### Success Response
+
+```json
+{
+  "success": true,
+  "code": "AI_FEEDBACK_COMPLETED",
+  "message": "AI feedback completed",
+  "data": {
+    "feedbackId": 1,
+    "interviewId": 10,
+    "overallScore": 85,
+    "strengths": "...",
+    "weaknesses": "...",
+    "improvementSuggestions": "...",
+    "summary": "..."
+  }
+}
+```
+
+---
+
+## Interview Result Query
+
+### GET /interviews/{interviewId}/result
+
+Only the completed interview owner can retrieve the questions, submitted answers, and aggregate feedback.
+
+### Success Response
+
+```json
+{
+  "success": true,
+  "code": "SUCCESS",
+  "message": "Success",
+  "data": {
+    "interviewId": 10,
+    "title": "Backend Interview",
+    "status": "COMPLETED",
+    "questionAnswers": [
+      {
+        "questionOrder": 1,
+        "questionContent": "...",
+        "answerContent": "...",
+        "answeredAt": "2026-08-06T10:00:00"
+      }
+    ],
+    "feedback": {
+      "overallScore": 85,
+      "strengths": "...",
+      "weaknesses": "...",
+      "improvementSuggestions": "...",
+      "summary": "..."
+    }
+  }
+}
+```
+
+---
+
 # Dashboard API
 
 ## 내 통계

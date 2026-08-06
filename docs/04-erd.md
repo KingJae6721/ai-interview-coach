@@ -198,25 +198,21 @@ Table answers {
 Table feedbacks {
   id bigint [pk, increment]
 
-  answer_id bigint [not null, ref: > answers.id]
+  interview_id bigint [not null, unique, ref: > interviews.id]
 
-  total_score int
+  overall_score int [not null]
 
-  technical_score int
+  strengths text [not null]
 
-  logic_score int
+  weaknesses text [not null]
 
-  communication_score int
+  improvement_suggestions text [not null]
 
-  specificity_score int
+  summary text [not null]
 
-  strength text
-
-  weakness text
-
-  recommendation text
-
-  ai_model varchar(50)
+  ai_model varchar(50) [not null]
 
   created_at timestamp
+
+  updated_at timestamp
 }

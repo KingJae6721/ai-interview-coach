@@ -35,6 +35,10 @@ public enum ErrorCode {
     INTERVIEW_ANSWER_ALREADY_EXISTS(HttpStatus.CONFLICT, "An answer already exists for this interview question."),
 
     INTERVIEW_NOT_COMPLETABLE(HttpStatus.CONFLICT, "All interview questions must be answered before completion."),
+    INTERVIEW_NOT_COMPLETED(HttpStatus.CONFLICT, "Interview must be completed before feedback generation."),
+    FEEDBACK_GENERATION_NOT_AVAILABLE(HttpStatus.CONFLICT, "Interview questions and answers are required."),
+    FEEDBACK_ALREADY_EXISTS(HttpStatus.CONFLICT, "Feedback already exists for this interview."),
+    FEEDBACK_NOT_FOUND(HttpStatus.NOT_FOUND, "Feedback not found."),
 
     // AI
     AI_REQUEST_FAILED(HttpStatus.BAD_GATEWAY, "AI 서버 요청에 실패했습니다.");

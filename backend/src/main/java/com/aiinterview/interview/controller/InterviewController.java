@@ -3,6 +3,9 @@ package com.aiinterview.interview.controller;
 import com.aiinterview.auth.CustomUserDetails;
 import com.aiinterview.common.code.ResultCode;
 import com.aiinterview.common.dto.ApiResponse;
+import com.aiinterview.feedback.dto.FeedbackGenerateResponse;
+import com.aiinterview.feedback.dto.InterviewResultResponse;
+import com.aiinterview.feedback.service.FeedbackService;
 import com.aiinterview.interview.dto.InterviewCreateResponse;
 import com.aiinterview.interview.dto.InterviewCreateRequest;
 import com.aiinterview.interview.dto.InterviewCompleteResponse;
@@ -30,6 +33,7 @@ import java.util.List;
 public class InterviewController {
 
     private final InterviewService interviewService;
+    private final FeedbackService feedbackService;
 
     @PostMapping
     public ResponseEntity<ApiResponse<InterviewCreateResponse>> createInterview(
@@ -73,6 +77,27 @@ public class InterviewController {
             @PathVariable Long interviewId) {
 
         InterviewCompleteResponse response = interviewService.completeInterview(userDetails.getId(), interviewId);
+
+        return ResponseEntity.ok(ApiResponse.success(ResultCode.SUCCESS, response));
+    }
+
+    @PostMapping("/{interviewId}/feedback")
+    public ResponseEntity<ApiResponse<FeedbackGenerateResponse>> generateFeedback(
+            @AuthenticationPrincipal CustomUserDetails userDetails,
+            @PathVariable Long interviewId) {
+
+        FeedbackGenerateResponse response = feedbackService.generateFeedback(userDetails.getId(), interviewId);
+
+        return ResponseEntity.status(HttpStatus.CREATED)
+                .body(ApiResponse.success(ResultCode.AI_FEEDBACK_COMPLETED, response));
+    }
+
+    @GetMapping("/{interviewId}/result")
+    public ResponseEntity<ApiResponse<InterviewResultResponse>> getInterviewResult(
+            @AuthenticationPrincipal CustomUserDetails userDetails,
+            @PathVariable Long interviewId) {
+
+        InterviewResultResponse response = feedbackService.getInterviewResult(userDetails.getId(), interviewId);
 
         return ResponseEntity.ok(ApiResponse.success(ResultCode.SUCCESS, response));
     }

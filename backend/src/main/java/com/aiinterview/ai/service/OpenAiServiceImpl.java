@@ -1,5 +1,8 @@
 package com.aiinterview.ai.service;
 
+import com.aiinterview.ai.dto.InterviewFeedbackRequest;
+import com.aiinterview.ai.dto.InterviewFeedbackResult;
+import com.aiinterview.ai.prompt.FeedbackPromptBuilder;
 import com.aiinterview.common.code.ErrorCode;
 import com.aiinterview.common.exception.BusinessException;
 import com.fasterxml.jackson.core.JsonProcessingException;
@@ -72,6 +75,33 @@ public class OpenAiServiceImpl implements OpenAiService {
         }
     }
 
+    @Override
+    public InterviewFeedbackResult generateInterviewFeedback(InterviewFeedbackRequest request) {
+        if (!StringUtils.hasText(apiKey)) {
+            throw new BusinessException(ErrorCode.AI_REQUEST_FAILED);
+        }
+
+        try {
+            String responseBody = restClient.post()
+                    .uri("/chat/completions")
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .body(Map.of(
+                            "model", model,
+                            "messages", List.of(
+                                    Map.of("role", "system", "content", FeedbackPromptBuilder.buildSystemPrompt()),
+                                    Map.of("role", "user", "content", FeedbackPromptBuilder.buildUserPrompt(request))
+                            ),
+                            "response_format", feedbackResponseFormat()
+                    ))
+                    .retrieve()
+                    .body(String.class);
+
+            return extractFeedback(responseBody);
+        } catch (RestClientException | JsonProcessingException e) {
+            throw new BusinessException(ErrorCode.AI_REQUEST_FAILED);
+        }
+    }
+
     private List<String> extractQuestions(String responseBody) throws JsonProcessingException {
         JsonNode response = objectMapper.readTree(responseBody);
         JsonNode content = response.at("/choices/0/message/content");
@@ -88,5 +118,62 @@ public class OpenAiServiceImpl implements OpenAiService {
         }
 
         return questions;
+    }
+
+    private Map<String, Object> feedbackResponseFormat() {
+        return Map.of(
+                "type", "json_schema",
+                "json_schema", Map.of(
+                        "name", "interview_feedback",
+                        "strict", true,
+                        "schema", Map.of(
+                                "type", "object",
+                                "properties", Map.of(
+                                        "overallScore", Map.of("type", "integer", "minimum", 0, "maximum", 100),
+                                        "strengths", Map.of("type", "string"),
+                                        "weaknesses", Map.of("type", "string"),
+                                        "improvementSuggestions", Map.of("type", "string"),
+                                        "summary", Map.of("type", "string")
+                                ),
+                                "required", List.of(
+                                        "overallScore", "strengths", "weaknesses", "improvementSuggestions", "summary"
+                                ),
+                                "additionalProperties", false
+                        )
+                )
+        );
+    }
+
+    private InterviewFeedbackResult extractFeedback(String responseBody) throws JsonProcessingException {
+        JsonNode response = objectMapper.readTree(responseBody);
+        JsonNode content = response.at("/choices/0/message/content");
+
+        if (!content.isTextual()) {
+            throw new BusinessException(ErrorCode.AI_REQUEST_FAILED);
+        }
+
+        JsonNode feedback = objectMapper.readTree(content.asText());
+        JsonNode overallScore = feedback.get("overallScore");
+        if (overallScore == null || !overallScore.canConvertToInt()
+                || overallScore.intValue() < 0 || overallScore.intValue() > 100) {
+            throw new BusinessException(ErrorCode.AI_REQUEST_FAILED);
+        }
+
+        return InterviewFeedbackResult.builder()
+                .overallScore(overallScore.intValue())
+                .strengths(getRequiredText(feedback, "strengths"))
+                .weaknesses(getRequiredText(feedback, "weaknesses"))
+                .improvementSuggestions(getRequiredText(feedback, "improvementSuggestions"))
+                .summary(getRequiredText(feedback, "summary"))
+                .aiModel(model)
+                .build();
+    }
+
+    private String getRequiredText(JsonNode feedback, String fieldName) {
+        JsonNode field = feedback.get(fieldName);
+        if (field == null || !field.isTextual() || !StringUtils.hasText(field.asText())) {
+            throw new BusinessException(ErrorCode.AI_REQUEST_FAILED);
+        }
+        return field.asText();
     }
 }
