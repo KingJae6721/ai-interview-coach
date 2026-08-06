@@ -33,10 +33,12 @@ public enum ErrorCode {
     // Interview
     INTERVIEW_NOT_FOUND(HttpStatus.NOT_FOUND, "면접을 찾을 수 없습니다."),
     INTERVIEW_ALREADY_STARTED(HttpStatus.CONFLICT, "이미 시작된 면접입니다."),
+    INTERVIEW_NOT_IN_PROGRESS(HttpStatus.CONFLICT, "Interview must be in progress."),
 
     INTERVIEW_QUESTION_NOT_FOUND(HttpStatus.NOT_FOUND, "Interview question not found."),
     INTERVIEW_ANSWER_NOT_FOUND(HttpStatus.NOT_FOUND, "Interview answer not found."),
     INTERVIEW_ANSWER_ALREADY_EXISTS(HttpStatus.CONFLICT, "An answer already exists for this interview question."),
+    ANSWER_ORDER_INVALID(HttpStatus.CONFLICT, "Only the next unanswered question can be answered."),
 
     INTERVIEW_NOT_COMPLETABLE(HttpStatus.CONFLICT, "All interview questions must be answered before completion."),
     INTERVIEW_NOT_COMPLETED(HttpStatus.CONFLICT, "Interview must be completed before feedback generation."),

@@ -22,12 +22,15 @@ public class GlobalExceptionHandler {
      * 비즈니스 로직 예외 처리
      */
     @ExceptionHandler(BusinessException.class)
-    protected ResponseEntity<ApiResponse<Void>> handleBusinessException(BusinessException e) {
+    protected ResponseEntity<ApiResponse<?>> handleBusinessException(BusinessException e) {
         log.error("BusinessException occurred: {}", e.getMessage(), e);
         ErrorCode errorCode = e.getErrorCode();
+        ApiResponse<?> response = e.getData() == null
+                ? ApiResponse.fail(errorCode, e.getMessage())
+                : ApiResponse.fail(errorCode, e.getData());
         return ResponseEntity
                 .status(errorCode.getStatus())
-                .body(ApiResponse.fail(errorCode, e.getMessage()));
+                .body(response);
     }
 
     /**

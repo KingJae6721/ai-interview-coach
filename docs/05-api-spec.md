@@ -371,6 +371,41 @@ Question 저장
 
 ### GET /interviews
 
+로그인 사용자의 면접 이력을 `createdAt` 내림차순으로 페이징 조회한다.
+
+### Query Parameters
+
+| 파라미터 | 기본값 | 설명 |
+|---|---:|---|
+| page | 0 | 페이지 번호 |
+| size | 20 | 페이지 크기 |
+
+### Response
+
+```json
+{
+  "success": true,
+  "code": "SUCCESS",
+  "message": "Success",
+  "data": {
+    "content": [
+      {
+        "interviewId": 10,
+        "title": "Backend Interview",
+        "status": "COMPLETED",
+        "createdAt": "2026-08-06T10:00:00",
+        "completedAt": "2026-08-06T10:30:00",
+        "companyName": "AI Interview",
+        "positionName": "Backend Developer",
+        "overallScore": 85
+      }
+    ],
+    "totalElements": 1,
+    "totalPages": 1
+  }
+}
+```
+
 ---
 
 ## 면접 상세
@@ -451,6 +486,14 @@ Feedback 생성
 
 ---
 
+# Interview Answer Order Policy
+
+`POST /api/v1/interviews/questions/{questionId}/answers` accepts only the first unanswered question in `questionOrder` sequence while the interview is `IN_PROGRESS`.
+
+Requests for an answered question return `INTERVIEW_ANSWER_ALREADY_EXISTS`; requests out of order return `ANSWER_ORDER_INVALID`.
+
+---
+
 # AI Follow-up Question API
 
 ## POST /api/v1/ai/questions/{questionId}/follow-up
@@ -526,6 +569,80 @@ Completed interview owners can generate one aggregate AI feedback result.
     "weaknesses": "...",
     "improvementSuggestions": "...",
     "summary": "..."
+  }
+}
+```
+
+---
+
+## Interview Complete Response
+
+### POST /api/v1/interviews/{interviewId}/complete
+
+Only the owner can complete an interview in `IN_PROGRESS` after every question, including follow-up questions, has an answer.
+
+### Success Response
+
+```json
+{
+  "success": true,
+  "code": "SUCCESS",
+  "message": "Success",
+  "data": {
+    "interviewId": 10,
+    "status": "COMPLETED",
+    "completedAt": "2026-08-06T11:00:00"
+  }
+}
+```
+
+### Incomplete Response
+
+```json
+{
+  "success": false,
+  "code": "INTERVIEW_NOT_COMPLETABLE",
+  "message": "All interview questions must be answered before completion.",
+  "data": {
+    "allAnswered": false,
+    "unansweredCount": 2,
+    "nextQuestionId": 4
+  }
+}
+```
+
+---
+
+## Interview Progress Query
+
+### GET /api/v1/interviews/{interviewId}/progress
+
+Only the interview owner can retrieve an interview that is currently in progress.
+
+### Success Response
+
+```json
+{
+  "success": true,
+  "code": "SUCCESS",
+  "message": "Success",
+  "data": {
+    "interviewId": 10,
+    "status": "IN_PROGRESS",
+    "questions": [
+      {
+        "questionId": 1,
+        "parentQuestionId": null,
+        "questionOrder": 1,
+        "content": "...",
+        "category": "TECH_STACK",
+        "difficulty": "MEDIUM",
+        "answerContent": "...",
+        "answeredAt": "2026-08-06T10:00:00"
+      }
+    ],
+    "nextQuestionId": 2,
+    "allAnswered": false
   }
 }
 ```

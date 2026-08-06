@@ -8,15 +8,17 @@ import com.aiinterview.user.repository.UserRepository;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.http.MediaType;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
 import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.test.web.servlet.setup.MockMvcBuilders;
+import org.springframework.web.context.WebApplicationContext;
 import org.testcontainers.containers.GenericContainer;
 import org.testcontainers.containers.PostgreSQLContainer;
 import org.testcontainers.junit.jupiter.Container;
@@ -27,10 +29,10 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
+import static org.springframework.security.test.web.servlet.setup.SecurityMockMvcConfigurers.springSecurity;
 
-@testcontainers
+@Testcontainers
 @SpringBootTest
-@AutoConfigureMockMvc
 class AuthIntegrationTest {
 
         private static final String EMAIL = "auth-test@example.com";
@@ -56,10 +58,10 @@ class AuthIntegrationTest {
                 registry.add("spring.data.redis.port", () -> REDIS.getMappedPort(6379));
         }
 
-        @Autowired
         private MockMvc mockMvc;
         @Autowired
-        private ObjectMapper objectMapper;
+        private WebApplicationContext webApplicationContext;
+        private final ObjectMapper objectMapper = new ObjectMapper();
         @Autowired
         private UserRepository userRepository;
         @Autowired
@@ -68,6 +70,13 @@ class AuthIntegrationTest {
         private BlacklistedAccessTokenRepository blacklistedAccessTokenRepository;
         @Autowired
         private StringRedisTemplate redisTemplate;
+
+        @BeforeEach
+        void setUpMockMvc() {
+                mockMvc = MockMvcBuilders.webAppContextSetup(webApplicationContext)
+                                .apply(springSecurity())
+                                .build();
+        }
 
         @AfterEach
         void tearDown() {

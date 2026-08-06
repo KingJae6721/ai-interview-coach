@@ -6,7 +6,11 @@ import com.aiinterview.interview.dto.InterviewCreateResponse;
 import com.aiinterview.interview.dto.InterviewCreateRequest;
 import com.aiinterview.interview.dto.InterviewCompleteResponse;
 import com.aiinterview.interview.dto.InterviewQuestionResponse;
+import com.aiinterview.interview.dto.InterviewProgressResponse;
+import com.aiinterview.interview.dto.InterviewHistoryResponse;
 import com.aiinterview.ai.dto.InterviewFollowUpQuestionResponse;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 
 import java.util.List;
 
@@ -14,7 +18,11 @@ public interface InterviewService {
 
     InterviewCreateResponse createInterview(Long userId, InterviewCreateRequest request);
 
+    Page<InterviewHistoryResponse> getInterviewHistory(Long userId, Pageable pageable);
+
     List<InterviewQuestionResponse> getInterviewQuestions(Long userId, Long interviewId);
+
+    InterviewProgressResponse getInterviewProgress(Long userId, Long interviewId);
 
     InterviewAnswerCreateResponse submitAnswer(Long userId, Long questionId, InterviewAnswerCreateRequest request);
 

@@ -1,0 +1,290 @@
+package com.aiinterview.interview;
+
+import com.aiinterview.ai.dto.InterviewFeedbackResult;
+import com.aiinterview.ai.service.OpenAiService;
+import com.aiinterview.auth.JwtProvider;
+import com.aiinterview.company.entity.Company;
+import com.aiinterview.company.repository.CompanyRepository;
+import com.aiinterview.feedback.repository.FeedbackRepository;
+import com.aiinterview.interview.entity.Interview;
+import com.aiinterview.interview.entity.InterviewStatus;
+import com.aiinterview.interview.repository.InterviewAnswerRepository;
+import com.aiinterview.interview.repository.InterviewQuestionRepository;
+import com.aiinterview.interview.repository.InterviewRepository;
+import com.aiinterview.jobposition.entity.JobPosition;
+import com.aiinterview.jobposition.repository.JobPositionRepository;
+import com.aiinterview.user.entity.AuthProvider;
+import com.aiinterview.user.entity.User;
+import com.aiinterview.user.entity.UserRole;
+import com.aiinterview.user.entity.UserStatus;
+import com.aiinterview.user.repository.UserRepository;
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.http.MediaType;
+import org.springframework.test.context.DynamicPropertyRegistry;
+import org.springframework.test.context.DynamicPropertySource;
+import org.springframework.test.context.bean.override.mockito.MockitoBean;
+import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.test.web.servlet.MvcResult;
+import org.springframework.test.web.servlet.setup.MockMvcBuilders;
+import org.springframework.web.context.WebApplicationContext;
+import org.testcontainers.containers.GenericContainer;
+import org.testcontainers.containers.PostgreSQLContainer;
+import org.testcontainers.junit.jupiter.Container;
+import org.testcontainers.junit.jupiter.Testcontainers;
+import org.testcontainers.utility.DockerImageName;
+
+import java.util.List;
+import java.util.Optional;
+
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.BDDMockito.given;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
+import static org.springframework.security.test.web.servlet.setup.SecurityMockMvcConfigurers.springSecurity;
+
+@Testcontainers
+@SpringBootTest
+class InterviewFlowIntegrationTest {
+
+    @Container
+    static final PostgreSQLContainer<?> POSTGRES = new PostgreSQLContainer<>("postgres:16-alpine")
+            .withDatabaseName("ai_interview")
+            .withUsername("postgres")
+            .withPassword("postgres");
+
+    @Container
+    static final GenericContainer<?> REDIS = new GenericContainer<>(DockerImageName.parse("redis:7-alpine"))
+            .withExposedPorts(6379);
+
+    @DynamicPropertySource
+    static void configureProperties(DynamicPropertyRegistry registry) {
+        registry.add("spring.datasource.url", POSTGRES::getJdbcUrl);
+        registry.add("spring.datasource.username", POSTGRES::getUsername);
+        registry.add("spring.datasource.password", POSTGRES::getPassword);
+        registry.add("spring.data.redis.host", REDIS::getHost);
+        registry.add("spring.data.redis.port", () -> REDIS.getMappedPort(6379));
+    }
+
+    private MockMvc mockMvc;
+    @Autowired
+    private WebApplicationContext webApplicationContext;
+    private final ObjectMapper objectMapper = new ObjectMapper();
+    @Autowired
+    private JwtProvider jwtProvider;
+    @Autowired
+    private UserRepository userRepository;
+    @Autowired
+    private CompanyRepository companyRepository;
+    @Autowired
+    private JobPositionRepository jobPositionRepository;
+    @Autowired
+    private InterviewRepository interviewRepository;
+    @Autowired
+    private InterviewQuestionRepository interviewQuestionRepository;
+    @Autowired
+    private InterviewAnswerRepository interviewAnswerRepository;
+    @Autowired
+    private FeedbackRepository feedbackRepository;
+
+    @MockitoBean
+    private OpenAiService openAiService;
+
+    private User owner;
+    private User otherUser;
+    private JobPosition jobPosition;
+    private String ownerToken;
+    private String otherUserToken;
+
+    @BeforeEach
+    void setUp() {
+        mockMvc = MockMvcBuilders.webAppContextSetup(webApplicationContext)
+                .apply(springSecurity())
+                .build();
+        owner = createUser("owner@example.com", "owner");
+        otherUser = createUser("other@example.com", "other");
+        Company company = companyRepository.save(Company.builder().name("Example Corp").build());
+        jobPosition = jobPositionRepository.save(JobPosition.builder()
+                .company(company)
+                .name("Backend Developer")
+                .techStack(List.of("Java", "Spring Boot", "JPA"))
+                .interviewCriteria("Explain design decisions with evidence.")
+                .build());
+        ownerToken = jwtProvider.createAccessToken(owner.getId(), owner.getRole());
+        otherUserToken = jwtProvider.createAccessToken(otherUser.getId(), otherUser.getRole());
+
+        given(openAiService.generateInterviewQuestions(anyString()))
+                .willReturn(List.of("Question 1", "Question 2", "Question 3", "Question 4", "Question 5"));
+        given(openAiService.generateFollowUpQuestion(anyString()))
+                .willReturn(Optional.of("Follow-up question"));
+        given(openAiService.generateInterviewFeedback(any()))
+                .willReturn(InterviewFeedbackResult.builder()
+                        .overallScore(90)
+                        .strengths("Strong technical reasoning")
+                        .weaknesses("More concrete metrics needed")
+                        .improvementSuggestions("Add measurable outcomes")
+                        .summary("Well structured interview")
+                        .aiModel("test-model")
+                        .build());
+    }
+
+    @AfterEach
+    void tearDown() {
+        feedbackRepository.deleteAll();
+        interviewAnswerRepository.deleteAll();
+        interviewQuestionRepository.deleteAll();
+        interviewRepository.deleteAll();
+        jobPositionRepository.deleteAll();
+        companyRepository.deleteAll();
+        userRepository.deleteAll();
+    }
+
+    @Test
+    void interviewFlow_createToResult_enforcesAccessOrderAndCompletion() throws Exception {
+        long interviewId = createInterview();
+        assertThat(interviewRepository.findById(interviewId))
+                .hasValueSatisfying(interview -> assertThat(interview.getStatus()).isEqualTo(InterviewStatus.READY));
+
+        mockMvc.perform(get("/api/v1/interviews/{interviewId}/questions", interviewId)
+                        .header("Authorization", bearer(ownerToken)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value("SUCCESS"));
+        assertThat(interviewRepository.findById(interviewId))
+                .hasValueSatisfying(interview -> assertThat(interview.getStatus()).isEqualTo(InterviewStatus.IN_PROGRESS));
+
+        JsonNode progress = getProgress(interviewId, ownerToken);
+        long firstQuestionId = progress.path("questions").get(0).path("questionId").asLong();
+        long secondQuestionId = progress.path("questions").get(1).path("questionId").asLong();
+        assertThat(progress.path("nextQuestionId").asLong()).isEqualTo(firstQuestionId);
+        assertThat(progress.path("allAnswered").asBoolean()).isFalse();
+
+        mockMvc.perform(get("/api/v1/interviews/{interviewId}/progress", interviewId)
+                        .header("Authorization", bearer(otherUserToken)))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.code").value("ACCESS_DENIED"));
+
+        submitAnswer(interviewId, secondQuestionId, ownerToken, "out of order")
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.code").value("ANSWER_ORDER_INVALID"));
+
+        submitAnswer(interviewId, firstQuestionId, ownerToken, "first answer")
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.code").value("SUCCESS"));
+        submitAnswer(interviewId, firstQuestionId, ownerToken, "duplicate answer")
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.code").value("INTERVIEW_ANSWER_ALREADY_EXISTS"));
+
+        mockMvc.perform(post("/api/v1/ai/questions/{questionId}/follow-up", firstQuestionId)
+                        .header("Authorization", bearer(ownerToken)))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.code").value("SUCCESS"))
+                .andExpect(jsonPath("$.data.parentQuestionId").value(firstQuestionId));
+
+        mockMvc.perform(post("/api/v1/interviews/{interviewId}/complete", interviewId)
+                        .header("Authorization", bearer(ownerToken)))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.code").value("INTERVIEW_NOT_COMPLETABLE"))
+                .andExpect(jsonPath("$.data.allAnswered").value(false))
+                .andExpect(jsonPath("$.data.unansweredCount").isNumber())
+                .andExpect(jsonPath("$.data.nextQuestionId").isNumber());
+
+        JsonNode currentProgress = getProgress(interviewId, ownerToken);
+        while (!currentProgress.path("allAnswered").asBoolean()) {
+            long nextQuestionId = currentProgress.path("nextQuestionId").asLong();
+            submitAnswer(interviewId, nextQuestionId, ownerToken, "answer for " + nextQuestionId)
+                    .andExpect(status().isCreated())
+                    .andExpect(jsonPath("$.code").value("SUCCESS"));
+            currentProgress = getProgress(interviewId, ownerToken);
+        }
+
+        mockMvc.perform(post("/api/v1/interviews/{interviewId}/complete", interviewId)
+                        .header("Authorization", bearer(ownerToken)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value("SUCCESS"))
+                .andExpect(jsonPath("$.data.status").value("COMPLETED"))
+                .andExpect(jsonPath("$.data.completedAt").exists());
+        assertThat(interviewRepository.findById(interviewId))
+                .hasValueSatisfying(interview -> {
+                    assertThat(interview.getStatus()).isEqualTo(InterviewStatus.COMPLETED);
+                    assertThat(interview.getCompletedAt()).isNotNull();
+                });
+
+        mockMvc.perform(post("/api/v1/interviews/{interviewId}/feedback", interviewId)
+                        .header("Authorization", bearer(ownerToken)))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.code").value("AI_FEEDBACK_COMPLETED"));
+        assertThat(feedbackRepository.existsByInterviewId(interviewId)).isTrue();
+
+        mockMvc.perform(post("/api/v1/interviews/{interviewId}/feedback", interviewId)
+                        .header("Authorization", bearer(ownerToken)))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.code").value("FEEDBACK_ALREADY_EXISTS"));
+
+        mockMvc.perform(get("/api/v1/interviews/{interviewId}/result", interviewId)
+                        .header("Authorization", bearer(ownerToken)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value("SUCCESS"))
+                .andExpect(jsonPath("$.data.status").value("COMPLETED"))
+                .andExpect(jsonPath("$.data.questionAnswers.length()").value(6))
+                .andExpect(jsonPath("$.data.feedback.overallScore").value(90));
+        assertThat(interviewAnswerRepository.countByInterviewQuestionInterviewId(interviewId)).isEqualTo(6);
+    }
+
+    private long createInterview() throws Exception {
+        MvcResult result = mockMvc.perform(post("/api/v1/interviews")
+                        .header("Authorization", bearer(ownerToken))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"jobPositionId\":" + jobPosition.getId() + ",\"title\":\"Backend Interview\"}"))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.code").value("INTERVIEW_CREATED"))
+                .andExpect(jsonPath("$.data.questionCount").value(5))
+                .andReturn();
+        return responseData(result).path("interviewId").asLong();
+    }
+
+    private JsonNode getProgress(long interviewId, String token) throws Exception {
+        MvcResult result = mockMvc.perform(get("/api/v1/interviews/{interviewId}/progress", interviewId)
+                        .header("Authorization", bearer(token)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value("SUCCESS"))
+                .andReturn();
+        return responseData(result);
+    }
+
+    private org.springframework.test.web.servlet.ResultActions submitAnswer(long interviewId, long questionId,
+                                                                             String token, String answerContent)
+            throws Exception {
+        return mockMvc.perform(post("/api/v1/interviews/questions/{questionId}/answers", questionId)
+                .header("Authorization", bearer(token))
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"answerContent\":\"" + answerContent + "\"}"));
+    }
+
+    private JsonNode responseData(MvcResult result) throws Exception {
+        return objectMapper.readTree(result.getResponse().getContentAsString()).path("data");
+    }
+
+    private User createUser(String email, String nickname) {
+        return userRepository.save(User.builder()
+                .email(email)
+                .password("encoded-password")
+                .nickname(nickname)
+                .role(UserRole.USER)
+                .authProvider(AuthProvider.LOCAL)
+                .status(UserStatus.ACTIVE)
+                .build());
+    }
+
+    private String bearer(String token) {
+        return "Bearer " + token;
+    }
+}

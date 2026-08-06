@@ -11,6 +11,15 @@ public interface InterviewQuestionRepository extends JpaRepository<InterviewQues
 
     List<InterviewQuestion> findByInterviewIdOrderByQuestionOrderAsc(Long interviewId);
 
+    @Query("""
+            select question
+            from InterviewQuestion question
+            left join fetch question.parentQuestion
+            where question.interview.id = :interviewId
+            order by question.questionOrder asc
+            """)
+    List<InterviewQuestion> findAllByInterviewIdWithParentOrderByQuestionOrderAsc(Long interviewId);
+
     long countByInterviewId(Long interviewId);
 
     boolean existsByParentQuestionId(Long parentQuestionId);

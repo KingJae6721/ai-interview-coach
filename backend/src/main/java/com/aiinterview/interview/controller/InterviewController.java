@@ -12,9 +12,14 @@ import com.aiinterview.interview.dto.InterviewCompleteResponse;
 import com.aiinterview.interview.dto.InterviewAnswerCreateRequest;
 import com.aiinterview.interview.dto.InterviewAnswerCreateResponse;
 import com.aiinterview.interview.dto.InterviewQuestionResponse;
+import com.aiinterview.interview.dto.InterviewProgressResponse;
+import com.aiinterview.interview.dto.InterviewHistoryResponse;
 import jakarta.validation.Valid;
 import com.aiinterview.interview.service.InterviewService;
 import lombok.RequiredArgsConstructor;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.web.PageableDefault;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
@@ -46,6 +51,16 @@ public class InterviewController {
                 .body(ApiResponse.success(ResultCode.INTERVIEW_CREATED, response));
     }
 
+    @GetMapping
+    public ResponseEntity<ApiResponse<Page<InterviewHistoryResponse>>> getInterviewHistory(
+            @AuthenticationPrincipal CustomUserDetails userDetails,
+            @PageableDefault(size = 20) Pageable pageable) {
+
+        Page<InterviewHistoryResponse> response = interviewService.getInterviewHistory(userDetails.getId(), pageable);
+
+        return ResponseEntity.ok(ApiResponse.success(response));
+    }
+
     @GetMapping("/{interviewId}/questions")
     public ResponseEntity<ApiResponse<List<InterviewQuestionResponse>>> getInterviewQuestions(
             @AuthenticationPrincipal CustomUserDetails userDetails,
@@ -53,6 +68,16 @@ public class InterviewController {
 
         List<InterviewQuestionResponse> response = interviewService.getInterviewQuestions(
                 userDetails.getId(), interviewId);
+
+        return ResponseEntity.ok(ApiResponse.success(response));
+    }
+
+    @GetMapping("/{interviewId}/progress")
+    public ResponseEntity<ApiResponse<InterviewProgressResponse>> getInterviewProgress(
+            @AuthenticationPrincipal CustomUserDetails userDetails,
+            @PathVariable Long interviewId) {
+
+        InterviewProgressResponse response = interviewService.getInterviewProgress(userDetails.getId(), interviewId);
 
         return ResponseEntity.ok(ApiResponse.success(response));
     }
