@@ -35,10 +35,11 @@ Enum Difficulty {
 }
 
 Enum QuestionCategory {
-  TECH
   CS
-  PROJECT
-  PERSONALITY
+  TECH_STACK
+  EXPERIENCE
+  SITUATION
+  COMPANY_FIT
 }
 
 Enum QuestionType {
@@ -71,10 +72,30 @@ Table companies {
   id bigint [pk, increment]
 
   name varchar(100) [not null]
-  homepage varchar(255)
+  website_url varchar(255)
   logo_url varchar(255)
 
   created_at timestamp
+  updated_at timestamp
+}
+
+// =========================
+// JOB POSITION
+// =========================
+
+Table job_positions {
+  id bigint [pk, increment]
+
+  company_id bigint [not null, ref: > companies.id]
+
+  name varchar(100) [not null]
+
+  tech_stack json
+
+  interview_criteria text
+
+  created_at timestamp
+  updated_at timestamp
 }
 
 // =========================
@@ -130,6 +151,8 @@ Table interviews {
 
   user_id bigint [not null, ref: > users.id]
 
+  job_position_id bigint [ref: > job_positions.id]
+
   resume_id bigint [ref: > resumes.id]
 
   job_posting_id bigint [ref: > job_postings.id]
@@ -160,9 +183,13 @@ Table questions {
 
   interview_id bigint [not null, ref: > interviews.id]
 
+  parent_question_id bigint [unique, ref: > questions.id]
+
   content text
 
   category QuestionCategory
+
+  difficulty Difficulty
 
   type QuestionType
 

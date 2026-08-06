@@ -1,6 +1,10 @@
 package com.aiinterview.interview.service;
 
 import com.aiinterview.ai.service.OpenAiService;
+import com.aiinterview.ai.dto.InterviewQuestionDistribution;
+import com.aiinterview.ai.dto.InterviewFollowUpQuestionResponse;
+import com.aiinterview.ai.prompt.InterviewQuestionDistributionPolicy;
+import com.aiinterview.ai.prompt.InterviewQuestionPromptBuilder;
 import com.aiinterview.common.code.ErrorCode;
 import com.aiinterview.common.exception.BusinessException;
 import com.aiinterview.interview.dto.InterviewAnswerCreateRequest;
@@ -12,10 +16,13 @@ import com.aiinterview.interview.dto.InterviewQuestionResponse;
 import com.aiinterview.interview.entity.Interview;
 import com.aiinterview.interview.entity.InterviewAnswer;
 import com.aiinterview.interview.entity.InterviewQuestion;
+import com.aiinterview.interview.entity.InterviewQuestionType;
 import com.aiinterview.interview.entity.InterviewStatus;
 import com.aiinterview.interview.repository.InterviewAnswerRepository;
 import com.aiinterview.interview.repository.InterviewQuestionRepository;
 import com.aiinterview.interview.repository.InterviewRepository;
+import com.aiinterview.jobposition.entity.JobPosition;
+import com.aiinterview.jobposition.repository.JobPositionRepository;
 import com.aiinterview.user.entity.User;
 import com.aiinterview.user.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
@@ -34,6 +41,7 @@ public class InterviewServiceImpl implements InterviewService {
     private final InterviewAnswerRepository interviewAnswerRepository;
     private final InterviewQuestionRepository interviewQuestionRepository;
     private final UserRepository userRepository;
+    private final JobPositionRepository jobPositionRepository;
     private final OpenAiService openAiService;
 
     @Override
@@ -42,18 +50,28 @@ public class InterviewServiceImpl implements InterviewService {
         User user = userRepository.findById(userId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.USER_NOT_FOUND));
 
+        JobPosition jobPosition = jobPositionRepository.findWithCompanyById(request.getJobPositionId())
+                .orElseThrow(() -> new BusinessException(ErrorCode.JOB_POSITION_NOT_FOUND));
+
         Interview interview = interviewRepository.save(Interview.builder()
                 .user(user)
+                .jobPosition(jobPosition)
                 .title(request.getTitle())
                 .status(InterviewStatus.READY)
                 .build());
 
-        List<String> generatedQuestions = openAiService.generateInterviewQuestions(interview.getTitle());
+        List<InterviewQuestionDistribution> distributions = InterviewQuestionDistributionPolicy.create(
+                interview, InterviewQuestionDistributionPolicy.DEFAULT_QUESTION_COUNT);
+        List<String> generatedQuestions = openAiService.generateInterviewQuestions(
+                InterviewQuestionPromptBuilder.buildUserPrompt(interview, distributions));
         List<InterviewQuestion> interviewQuestions = IntStream.range(0, generatedQuestions.size())
                 .mapToObj(index -> InterviewQuestion.builder()
                         .interview(interview)
                         .questionOrder(index + 1)
                         .content(generatedQuestions.get(index))
+                        .category(distributions.get(index).category())
+                        .difficulty(distributions.get(index).difficulty())
+                        .type(InterviewQuestionType.NORMAL)
                         .isAiGenerated(true)
                         .build())
                 .toList();
@@ -116,6 +134,21 @@ public class InterviewServiceImpl implements InterviewService {
 
     @Override
     @Transactional
+    public InterviewFollowUpQuestionResponse generateFollowUpQuestion(Long userId, Long questionId) {
+        InterviewQuestion parentQuestion = interviewQuestionRepository.findWithInterviewAndUserById(questionId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.INTERVIEW_QUESTION_NOT_FOUND));
+
+        if (!parentQuestion.getInterview().getUser().getId().equals(userId)) {
+            throw new BusinessException(ErrorCode.ACCESS_DENIED);
+        }
+
+        return interviewQuestionRepository.findByParentQuestionId(questionId)
+                .map(followUpQuestion -> toFollowUpResponse(parentQuestion, followUpQuestion, false))
+                .orElseGet(() -> createFollowUpQuestion(parentQuestion));
+    }
+
+    @Override
+    @Transactional
     public InterviewCompleteResponse completeInterview(Long userId, Long interviewId) {
         Interview interview = interviewRepository.findById(interviewId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.INTERVIEW_NOT_FOUND));
@@ -145,6 +178,40 @@ public class InterviewServiceImpl implements InterviewService {
                 .questionId(interviewAnswer.getInterviewQuestion().getId())
                 .answerContent(interviewAnswer.getAnswerContent())
                 .answeredAt(interviewAnswer.getAnsweredAt())
+                .created(created)
+                .build();
+    }
+
+    private InterviewFollowUpQuestionResponse createFollowUpQuestion(InterviewQuestion parentQuestion) {
+        InterviewAnswer answer = interviewAnswerRepository.findByInterviewQuestionId(parentQuestion.getId())
+                .orElseThrow(() -> new BusinessException(ErrorCode.INTERVIEW_ANSWER_NOT_FOUND));
+
+        return openAiService.generateFollowUpQuestion(answer.getAnswerContent())
+                .map(content -> {
+                    InterviewQuestion followUpQuestion = interviewQuestionRepository.save(InterviewQuestion.builder()
+                            .interview(parentQuestion.getInterview())
+                            .parentQuestion(parentQuestion)
+                            .questionOrder(interviewQuestionRepository.findMaxQuestionOrderByInterviewId(
+                                    parentQuestion.getInterview().getId()) + 1)
+                            .content(content)
+                            .type(InterviewQuestionType.FOLLOW_UP)
+                            .isAiGenerated(true)
+                            .build());
+                    return toFollowUpResponse(parentQuestion, followUpQuestion, true);
+                })
+                .orElseGet(() -> InterviewFollowUpQuestionResponse.builder()
+                        .parentQuestionId(parentQuestion.getId())
+                        .created(false)
+                        .build());
+    }
+
+    private InterviewFollowUpQuestionResponse toFollowUpResponse(InterviewQuestion parentQuestion,
+                                                                  InterviewQuestion followUpQuestion,
+                                                                  boolean created) {
+        return InterviewFollowUpQuestionResponse.builder()
+                .parentQuestionId(parentQuestion.getId())
+                .followUpQuestionId(followUpQuestion.getId())
+                .content(followUpQuestion.getContent())
                 .created(created)
                 .build();
     }

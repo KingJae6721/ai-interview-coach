@@ -27,11 +27,15 @@ public enum ErrorCode {
     // Company
     COMPANY_NOT_FOUND(HttpStatus.NOT_FOUND, "회사를 찾을 수 없습니다."),
 
+    // Job Position
+    JOB_POSITION_NOT_FOUND(HttpStatus.NOT_FOUND, "Job position not found."),
+
     // Interview
     INTERVIEW_NOT_FOUND(HttpStatus.NOT_FOUND, "면접을 찾을 수 없습니다."),
     INTERVIEW_ALREADY_STARTED(HttpStatus.CONFLICT, "이미 시작된 면접입니다."),
 
     INTERVIEW_QUESTION_NOT_FOUND(HttpStatus.NOT_FOUND, "Interview question not found."),
+    INTERVIEW_ANSWER_NOT_FOUND(HttpStatus.NOT_FOUND, "Interview answer not found."),
     INTERVIEW_ANSWER_ALREADY_EXISTS(HttpStatus.CONFLICT, "An answer already exists for this interview question."),
 
     INTERVIEW_NOT_COMPLETABLE(HttpStatus.CONFLICT, "All interview questions must be answered before completion."),

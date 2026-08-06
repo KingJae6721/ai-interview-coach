@@ -298,21 +298,17 @@ DB 저장
 
 ```json
 {
-  "resumeId":1,
-  "jobPostingId":3,
-  "difficulty":"MEDIUM",
-  "interviewType":"COMPANY"
+  "jobPositionId": 1,
+  "title": "Backend Interview"
 }
 ```
 
 ### Process
 
 ```
-Resume
+Company + JobPosition
 
-+
-
-JobPosting
+Question distribution policy (difficulty and category)
 
 ↓
 
@@ -455,6 +451,30 @@ Feedback 생성
 
 ---
 
+# AI Follow-up Question API
+
+## POST /api/v1/ai/questions/{questionId}/follow-up
+
+The authenticated interview owner can generate at most one follow-up question from the saved answer.
+
+### Success Response
+
+```json
+{
+  "success": true,
+  "code": "SUCCESS",
+  "message": "Success",
+  "data": {
+    "parentQuestionId": 1,
+    "followUpQuestionId": 6,
+    "content": "해당 선택이 성능에 미친 영향을 구체적으로 설명해 주세요.",
+    "created": true
+  }
+}
+```
+
+---
+
 # Feedback API
 
 ## 피드백 조회
@@ -590,16 +610,9 @@ Only the completed interview owner can retrieve the questions, submitted answers
 
 ## 꼬리 질문 생성
 
-### POST /ai/follow-up
+### POST /api/v1/ai/questions/{questionId}/follow-up
 
-### Request
-
-```json
-{
-  "questionId":1,
-  "answer":"..."
-}
-```
+The saved answer is used as the sole input for follow-up question generation.
 
 ---
 

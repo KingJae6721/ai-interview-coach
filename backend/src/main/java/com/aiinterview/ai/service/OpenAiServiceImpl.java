@@ -3,6 +3,7 @@ package com.aiinterview.ai.service;
 import com.aiinterview.ai.dto.InterviewFeedbackRequest;
 import com.aiinterview.ai.dto.InterviewFeedbackResult;
 import com.aiinterview.ai.prompt.FeedbackPromptBuilder;
+import com.aiinterview.ai.prompt.FollowUpQuestionPromptBuilder;
 import com.aiinterview.common.code.ErrorCode;
 import com.aiinterview.common.exception.BusinessException;
 import com.fasterxml.jackson.core.JsonProcessingException;
@@ -18,6 +19,7 @@ import org.springframework.web.client.RestClientException;
 
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 
 @Service
 public class OpenAiServiceImpl implements OpenAiService {
@@ -25,8 +27,9 @@ public class OpenAiServiceImpl implements OpenAiService {
     private static final int QUESTION_COUNT = 5;
 
     private static final String QUESTION_GENERATION_PROMPT = """
-            You are a technical interviewer. Generate exactly five interview questions for the interview title provided.
+            You are a technical interviewer. Generate exactly five interview questions from the provided interview context.
             Questions must be in Korean, concise, and appropriate for a software engineering interview.
+            Follow the required question distribution in order and avoid duplicate or substantially similar questions.
             Return only a JSON array of five strings. Do not include markdown, explanations, or numbering.
             """;
 
@@ -50,7 +53,7 @@ public class OpenAiServiceImpl implements OpenAiService {
     }
 
     @Override
-    public List<String> generateInterviewQuestions(String interviewTitle) {
+    public List<String> generateInterviewQuestions(String questionGenerationPrompt) {
         if (!StringUtils.hasText(apiKey)) {
             throw new BusinessException(ErrorCode.AI_REQUEST_FAILED);
         }
@@ -63,13 +66,39 @@ public class OpenAiServiceImpl implements OpenAiService {
                             "model", model,
                             "messages", List.of(
                                     Map.of("role", "system", "content", QUESTION_GENERATION_PROMPT),
-                                    Map.of("role", "user", "content", "Interview title: " + interviewTitle)
+                                    Map.of("role", "user", "content", questionGenerationPrompt)
                             )
                     ))
                     .retrieve()
                     .body(String.class);
 
             return extractQuestions(responseBody);
+        } catch (RestClientException | JsonProcessingException e) {
+            throw new BusinessException(ErrorCode.AI_REQUEST_FAILED);
+        }
+    }
+
+    @Override
+    public Optional<String> generateFollowUpQuestion(String answerContent) {
+        if (!StringUtils.hasText(apiKey)) {
+            throw new BusinessException(ErrorCode.AI_REQUEST_FAILED);
+        }
+
+        try {
+            String responseBody = restClient.post()
+                    .uri("/chat/completions")
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .body(Map.of(
+                            "model", model,
+                            "messages", List.of(
+                                    Map.of("role", "system", "content", FollowUpQuestionPromptBuilder.buildSystemPrompt()),
+                                    Map.of("role", "user", "content", FollowUpQuestionPromptBuilder.buildUserPrompt(answerContent))
+                            )
+                    ))
+                    .retrieve()
+                    .body(String.class);
+
+            return extractFollowUpQuestion(responseBody);
         } catch (RestClientException | JsonProcessingException e) {
             throw new BusinessException(ErrorCode.AI_REQUEST_FAILED);
         }
@@ -118,6 +147,24 @@ public class OpenAiServiceImpl implements OpenAiService {
         }
 
         return questions;
+    }
+
+    private Optional<String> extractFollowUpQuestion(String responseBody) throws JsonProcessingException {
+        JsonNode response = objectMapper.readTree(responseBody);
+        JsonNode content = response.at("/choices/0/message/content");
+
+        if (!content.isTextual()) {
+            throw new BusinessException(ErrorCode.AI_REQUEST_FAILED);
+        }
+
+        String followUpQuestion = content.asText().trim();
+        if ("NO_FOLLOW_UP".equals(followUpQuestion)) {
+            return Optional.empty();
+        }
+        if (!StringUtils.hasText(followUpQuestion)) {
+            throw new BusinessException(ErrorCode.AI_REQUEST_FAILED);
+        }
+        return Optional.of(followUpQuestion);
     }
 
     private Map<String, Object> feedbackResponseFormat() {
