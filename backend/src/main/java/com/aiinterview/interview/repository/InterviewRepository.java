@@ -3,6 +3,8 @@ package com.aiinterview.interview.repository;
 import com.aiinterview.interview.entity.Interview;
 import com.aiinterview.dashboard.dto.DashboardRecentInterviewResponse;
 import com.aiinterview.dashboard.dto.DashboardStatisticsProjection;
+import com.aiinterview.dashboard.dto.DashboardScoreTrendResponse;
+import com.aiinterview.dashboard.dto.DashboardAnalyticsProjection;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.EntityGraph;
@@ -37,6 +39,27 @@ public interface InterviewRepository extends JpaRepository<Interview, Long> {
             + "where interview.user.id = :userId "
             + "order by interview.createdAt desc")
     List<DashboardRecentInterviewResponse> findRecentDashboardInterviewsByUserId(Long userId, Pageable pageable);
+
+    @Query("select new com.aiinterview.dashboard.dto.DashboardScoreTrendResponse("
+            + "interview.id, interview.title, interview.completedAt, feedback.overallScore) "
+            + "from Interview interview "
+            + "join Feedback feedback on feedback.interview = interview "
+            + "where interview.user.id = :userId "
+            + "and interview.status = com.aiinterview.interview.entity.InterviewStatus.COMPLETED "
+            + "order by interview.completedAt desc")
+    List<DashboardScoreTrendResponse> findRecentCompletedScoreTrendByUserId(Long userId, Pageable pageable);
+
+    @Query("select new com.aiinterview.dashboard.dto.DashboardAnalyticsProjection("
+            + "function('date_trunc', :dateTruncUnit, interview.completedAt), "
+            + "avg(feedback.overallScore), count(interview)) "
+            + "from Interview interview "
+            + "join Feedback feedback on feedback.interview = interview "
+            + "where interview.user.id = :userId "
+            + "and interview.status = com.aiinterview.interview.entity.InterviewStatus.COMPLETED "
+            + "group by function('date_trunc', :dateTruncUnit, interview.completedAt) "
+            + "order by function('date_trunc', :dateTruncUnit, interview.completedAt) desc")
+    List<DashboardAnalyticsProjection> findDashboardAnalyticsByUserId(
+            Long userId, String dateTruncUnit, Pageable pageable);
 
     @Query("select interview from Interview interview join fetch interview.user where interview.id = :interviewId")
     Optional<Interview> findWithUserById(Long interviewId);

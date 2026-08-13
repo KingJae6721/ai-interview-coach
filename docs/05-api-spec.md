@@ -726,6 +726,83 @@ Only the completed interview owner can retrieve the questions, submitted answers
 
 ---
 
+## 점수 추이
+
+### GET /dashboard/score-trend
+
+로그인 사용자의 Feedback이 있는 완료 면접 중 최근 N건을 완료 시각 오름차순으로 조회한다.
+
+### Query Parameters
+
+| 파라미터 | 기본값 | 범위 | 설명 |
+|---|---:|---:|---|
+| limit | 10 | 1~100 | 최근 조회 건수 |
+
+### Response
+
+```json
+{
+  "success": true,
+  "code": "SUCCESS",
+  "message": "Success",
+  "data": [
+    {
+      "interviewId": 8,
+      "title": "Java Backend Interview",
+      "completedAt": "2026-08-10T10:30:00",
+      "overallScore": 80
+    },
+    {
+      "interviewId": 10,
+      "title": "Spring Interview",
+      "completedAt": "2026-08-13T10:30:00",
+      "overallScore": 85
+    }
+  ]
+}
+```
+
+---
+
+## 기간별 점수 분석
+
+### GET /dashboard/analytics?period=WEEKLY
+
+완료되고 Feedback이 생성된 본인 면접의 완료 시각을 주간 또는 월간으로 집계한다. `scoreChange`는 직전 반환 기간의 평균 점수와의 차이이며, 이전 데이터가 없으면 `null`이다.
+
+### Query Parameters
+
+| 파라미터 | 기본값 | 범위 | 설명 |
+|---|---:|---:|---|
+| period | WEEKLY | WEEKLY, MONTHLY | 집계 단위 |
+| limit | 6 | 1~24 | 최근 집계 기간 수 |
+
+### Response
+
+```json
+{
+  "success": true,
+  "code": "SUCCESS",
+  "message": "Success",
+  "data": [
+    {
+      "periodStartAt": "2026-08-03T00:00:00",
+      "averageScore": 80.0,
+      "interviewCount": 2,
+      "scoreChange": null
+    },
+    {
+      "periodStartAt": "2026-08-10T00:00:00",
+      "averageScore": 85.0,
+      "interviewCount": 3,
+      "scoreChange": 5.0
+    }
+  ]
+}
+```
+
+---
+
 # AI API
 
 ## 질문 재생성
