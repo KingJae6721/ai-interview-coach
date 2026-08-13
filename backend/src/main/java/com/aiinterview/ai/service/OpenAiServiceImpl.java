@@ -9,10 +9,10 @@ import com.aiinterview.ai.prompt.FollowUpQuestionPromptBuilder;
 import com.aiinterview.ai.prompt.QuestionEvaluationPromptBuilder;
 import com.aiinterview.common.code.ErrorCode;
 import com.aiinterview.common.exception.BusinessException;
-import com.fasterxml.jackson.core.JsonProcessingException;
-import com.fasterxml.jackson.core.type.TypeReference;
-import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.ObjectMapper;
+import tools.jackson.core.JacksonException;
+import tools.jackson.core.type.TypeReference;
+import tools.jackson.databind.JsonNode;
+import tools.jackson.databind.ObjectMapper;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.MediaType;
 import org.springframework.stereotype.Service;
@@ -76,7 +76,7 @@ public class OpenAiServiceImpl implements OpenAiService {
                     .body(String.class);
 
             return extractQuestions(responseBody);
-        } catch (RestClientException | JsonProcessingException e) {
+        } catch (RestClientException | JacksonException e) {
             throw new BusinessException(ErrorCode.AI_REQUEST_FAILED);
         }
     }
@@ -102,7 +102,7 @@ public class OpenAiServiceImpl implements OpenAiService {
                     .body(String.class);
 
             return extractFollowUpQuestion(responseBody);
-        } catch (RestClientException | JsonProcessingException e) {
+        } catch (RestClientException | JacksonException e) {
             throw new BusinessException(ErrorCode.AI_REQUEST_FAILED);
         }
     }
@@ -129,7 +129,7 @@ public class OpenAiServiceImpl implements OpenAiService {
                     .body(String.class);
 
             return extractFeedback(responseBody);
-        } catch (RestClientException | JsonProcessingException e) {
+        } catch (RestClientException | JacksonException e) {
             throw new BusinessException(ErrorCode.AI_REQUEST_FAILED);
         }
     }
@@ -156,12 +156,12 @@ public class OpenAiServiceImpl implements OpenAiService {
                     .body(String.class);
 
             return extractQuestionEvaluation(responseBody);
-        } catch (RestClientException | JsonProcessingException e) {
+        } catch (RestClientException | JacksonException e) {
             throw new BusinessException(ErrorCode.AI_REQUEST_FAILED);
         }
     }
 
-    private List<String> extractQuestions(String responseBody) throws JsonProcessingException {
+    private List<String> extractQuestions(String responseBody) throws JacksonException {
         JsonNode response = objectMapper.readTree(responseBody);
         JsonNode content = response.at("/choices/0/message/content");
 
@@ -179,7 +179,7 @@ public class OpenAiServiceImpl implements OpenAiService {
         return questions;
     }
 
-    private Optional<String> extractFollowUpQuestion(String responseBody) throws JsonProcessingException {
+    private Optional<String> extractFollowUpQuestion(String responseBody) throws JacksonException {
         JsonNode response = objectMapper.readTree(responseBody);
         JsonNode content = response.at("/choices/0/message/content");
 
@@ -245,7 +245,7 @@ public class OpenAiServiceImpl implements OpenAiService {
         );
     }
 
-    private InterviewFeedbackResult extractFeedback(String responseBody) throws JsonProcessingException {
+    private InterviewFeedbackResult extractFeedback(String responseBody) throws JacksonException {
         JsonNode response = objectMapper.readTree(responseBody);
         JsonNode content = response.at("/choices/0/message/content");
 
@@ -270,7 +270,7 @@ public class OpenAiServiceImpl implements OpenAiService {
                 .build();
     }
 
-    private QuestionEvaluationResult extractQuestionEvaluation(String responseBody) throws JsonProcessingException {
+    private QuestionEvaluationResult extractQuestionEvaluation(String responseBody) throws JacksonException {
         JsonNode response = objectMapper.readTree(responseBody);
         JsonNode content = response.at("/choices/0/message/content");
 

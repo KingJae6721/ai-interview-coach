@@ -52,14 +52,14 @@ public interface InterviewRepository extends JpaRepository<Interview, Long> {
     List<DashboardScoreTrendResponse> findRecentCompletedScoreTrendByUserId(Long userId, Pageable pageable);
 
     @Query("select new com.aiinterview.dashboard.dto.DashboardAnalyticsProjection("
-            + "function('date_trunc', :dateTruncUnit, interview.completedAt), "
+            + "cast(function('date_trunc', :dateTruncUnit, interview.completedAt) as LocalDateTime), "
             + "avg(feedback.overallScore), count(interview)) "
             + "from Interview interview "
             + "join Feedback feedback on feedback.interview = interview "
             + "where interview.user.id = :userId "
             + "and interview.status = com.aiinterview.interview.entity.InterviewStatus.COMPLETED "
-            + "group by function('date_trunc', :dateTruncUnit, interview.completedAt) "
-            + "order by function('date_trunc', :dateTruncUnit, interview.completedAt) desc")
+            + "group by cast(function('date_trunc', :dateTruncUnit, interview.completedAt) as LocalDateTime) "
+            + "order by cast(function('date_trunc', :dateTruncUnit, interview.completedAt) as LocalDateTime) desc")
     List<DashboardAnalyticsProjection> findDashboardAnalyticsByUserId(
             Long userId, String dateTruncUnit, Pageable pageable);
 

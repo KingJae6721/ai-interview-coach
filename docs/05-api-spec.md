@@ -237,6 +237,37 @@ file : resume.pdf
 
 ---
 
+# JobPosition API
+
+## 직무 목록 조회
+
+### GET /api/v1/job-positions
+
+로그인 사용자가 면접 생성에 사용할 전체 직무 목록을 조회한다.
+
+### Response
+
+```json
+{
+  "success": true,
+  "code": "SUCCESS",
+  "message": "Success",
+  "data": [
+    {
+      "jobPositionId": 1,
+      "positionName": "Backend Developer",
+      "companyId": 1,
+      "companyName": "AI Interview",
+      "techStack": ["Java", "Spring Boot"]
+    }
+  ]
+}
+```
+
+JobPosition이 없으면 `data`는 빈 배열을 반환한다.
+
+---
+
 # Job Posting API
 
 ## 채용공고 등록
