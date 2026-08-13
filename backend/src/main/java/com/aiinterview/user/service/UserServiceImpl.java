@@ -51,19 +51,19 @@ public class UserServiceImpl implements UserService {
     public SignupResponse signup(SignupRequest request) {
 
         // 1. 이메일 중복 검사
-        if (userRepository.existsByEmail(request.getEmail())) {
-            log.error("Signup failed - duplicate email: {}", request.getEmail());
+        if (userRepository.existsByEmail(request.email())) {
+            log.error("Signup failed - duplicate email: {}", request.email());
             throw new BusinessException(ErrorCode.DUPLICATE_EMAIL);
         }
 
         // 2. 비밀번호 BCrypt 암호화
-        String encodedPassword = passwordEncoder.encode(request.getPassword());
+        String encodedPassword = passwordEncoder.encode(request.password());
 
         // 3. User 엔티티 생성 (Builder 패턴 사용, Setter 사용 금지)
         User user = User.builder()
-                .email(request.getEmail())
+                .email(request.email())
                 .password(encodedPassword)
-                .nickname(request.getNickname())
+                .nickname(request.nickname())
                 .role(UserRole.USER)
                 .authProvider(AuthProvider.LOCAL)
                 .status(UserStatus.ACTIVE)
@@ -95,21 +95,21 @@ public class UserServiceImpl implements UserService {
     public LoginResponse login(LoginRequest request) {
 
         // 1. 이메일로 회원 조회
-        User user = userRepository.findByEmail(request.getEmail())
+        User user = userRepository.findByEmail(request.email())
                 .orElseThrow(() -> {
-                    log.error("Login failed - user not found: {}", request.getEmail());
+                    log.error("Login failed - user not found: {}", request.email());
                     return new BusinessException(ErrorCode.USER_NOT_FOUND);
                 });
 
         // 2. Soft Delete(탈퇴) 회원 체크
         if (user.getStatus() == UserStatus.DELETED) {
-            log.error("Login failed - deleted user account: {}", request.getEmail());
+            log.error("Login failed - deleted user account: {}", request.email());
             throw new BusinessException(ErrorCode.USER_NOT_FOUND);
         }
 
         // 3. 비밀번호 일치 확인 (matches() 사용)
-        if (!passwordEncoder.matches(request.getPassword(), user.getPassword())) {
-            log.error("Login failed - invalid password for: {}", request.getEmail());
+        if (!passwordEncoder.matches(request.password(), user.getPassword())) {
+            log.error("Login failed - invalid password for: {}", request.email());
             throw new BusinessException(ErrorCode.INVALID_PASSWORD);
         }
 
@@ -195,7 +195,7 @@ public class UserServiceImpl implements UserService {
     @Transactional
     public ReissueResponse reissue(ReissueRequest request) {
 
-        String refreshToken = request.getRefreshToken();
+        String refreshToken = request.refreshToken();
 
         // 1. Refresh Token 서명/만료 검증
         if (!jwtProvider.validateToken(refreshToken)) {

@@ -94,7 +94,7 @@ public class AuthController {
     public ResponseEntity<ApiResponse<SignupResponse>> signup(
             @RequestBody @Valid SignupRequest request) {
 
-        log.info("Signup request received - email: {}", request.getEmail());
+        log.info("Signup request received - email: {}", request.email());
 
         SignupResponse response = userService.signup(request);
 
@@ -137,7 +137,7 @@ public class AuthController {
     public ResponseEntity<ApiResponse<LoginResponse>> login(
             @RequestBody @Valid LoginRequest request) {
 
-        log.info("Login request received - email: {}", request.getEmail());
+        log.info("Login request received - email: {}", request.email());
 
         LoginResponse response = userService.login(request);
 

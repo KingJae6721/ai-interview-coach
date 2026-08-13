@@ -130,6 +130,19 @@ class AuthIntegrationTest {
                                 .andExpect(status().isForbidden());
         }
 
+        @Test
+        void signup_deserializesJsonRequest() throws Exception {
+                String email = "signup-request-test@example.com";
+
+                mockMvc.perform(post("/api/v1/auth/signup")
+                                .contentType(MediaType.APPLICATION_JSON)
+                                .content("{\"email\":\"" + email
+                                                + "\",\"password\":\"Password123!\",\"nickname\":\"signup-test\"}"))
+                                .andExpect(status().isCreated());
+
+                assertThat(userRepository.findByEmail(email)).isPresent();
+        }
+
         private Tokens login() throws Exception {
                 String body = mockMvc.perform(post("/api/v1/auth/login").contentType(MediaType.APPLICATION_JSON)
                                 .content("{\"email\":\"" + EMAIL + "\",\"password\":\"" + PASSWORD + "\"}"))
