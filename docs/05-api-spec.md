@@ -689,21 +689,38 @@ Only the completed interview owner can retrieve the questions, submitted answers
 
 # Dashboard API
 
-## 내 통계
+## 면접 통계 요약
 
-### GET /dashboard
+### GET /dashboard/summary
+
+로그인 사용자의 전체 면접 통계와 최근 5건의 면접 요약을 조회한다. Feedback이 없는 면접은 점수 통계에서 제외한다.
 
 ### Response
 
 ```json
 {
-  "interviewCount":15,
-
-  "averageScore":82,
-
-  "bestCategory":"TECH",
-
-  "weakCategory":"CS"
+  "success": true,
+  "code": "SUCCESS",
+  "message": "Success",
+  "data": {
+    "totalInterviews": 15,
+    "completedInterviews": 8,
+    "averageScore": 82.5,
+    "highestScore": 95,
+    "latestInterviewAt": "2026-08-13T10:00:00",
+    "recentInterviews": [
+      {
+        "interviewId": 10,
+        "title": "Backend Interview",
+        "status": "COMPLETED",
+        "createdAt": "2026-08-13T10:00:00",
+        "completedAt": "2026-08-13T10:30:00",
+        "companyName": "AI Interview",
+        "positionName": "Backend Developer",
+        "overallScore": 85
+      }
+    ]
+  }
 }
 ```
 
