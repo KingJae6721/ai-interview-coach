@@ -6,6 +6,7 @@ import com.aiinterview.dashboard.dto.DashboardSummaryResponse;
 import com.aiinterview.dashboard.dto.DashboardScoreTrendResponse;
 import com.aiinterview.dashboard.dto.DashboardAnalyticsPeriod;
 import com.aiinterview.dashboard.dto.DashboardAnalyticsResponse;
+import com.aiinterview.dashboard.dto.DashboardWeaknessResponse;
 import com.aiinterview.dashboard.service.DashboardService;
 import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
@@ -54,6 +55,15 @@ public class DashboardController {
             @RequestParam(defaultValue = "6") @Min(1) @Max(24) int limit) {
 
         List<DashboardAnalyticsResponse> response = dashboardService.getAnalytics(userDetails.getId(), period, limit);
+
+        return ResponseEntity.ok(ApiResponse.success(response));
+    }
+
+    @GetMapping("/weaknesses")
+    public ResponseEntity<ApiResponse<DashboardWeaknessResponse>> getWeaknesses(
+            @AuthenticationPrincipal CustomUserDetails userDetails) {
+
+        DashboardWeaknessResponse response = dashboardService.getWeaknesses(userDetails.getId());
 
         return ResponseEntity.ok(ApiResponse.success(response));
     }

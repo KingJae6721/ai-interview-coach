@@ -7,6 +7,11 @@ import com.aiinterview.dashboard.dto.DashboardScoreTrendResponse;
 import com.aiinterview.dashboard.dto.DashboardAnalyticsPeriod;
 import com.aiinterview.dashboard.dto.DashboardAnalyticsProjection;
 import com.aiinterview.dashboard.dto.DashboardAnalyticsResponse;
+import com.aiinterview.dashboard.dto.DashboardCategoryStatisticsProjection;
+import com.aiinterview.dashboard.dto.DashboardCategoryStatisticsResponse;
+import com.aiinterview.dashboard.dto.DashboardDifficultyStatisticsProjection;
+import com.aiinterview.dashboard.dto.DashboardDifficultyStatisticsResponse;
+import com.aiinterview.dashboard.dto.DashboardWeaknessResponse;
 import com.aiinterview.interview.repository.InterviewRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.PageRequest;
@@ -22,6 +27,8 @@ import java.util.List;
 public class DashboardServiceImpl implements DashboardService {
 
     private static final int RECENT_INTERVIEW_LIMIT = 5;
+    private static final String PERFORMANCE_ANALYSIS_UNAVAILABLE_REASON =
+            "Question evaluations are required for performance analysis.";
 
     private final InterviewRepository interviewRepository;
 
@@ -74,5 +81,51 @@ public class DashboardServiceImpl implements DashboardService {
         }
 
         return responses;
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public DashboardWeaknessResponse getWeaknesses(Long userId) {
+        List<DashboardCategoryStatisticsResponse> categoryStatistics = interviewRepository
+                .findCategoryStatisticsByUserId(userId).stream()
+                .map(this::toCategoryStatisticsResponse)
+                .toList();
+        List<DashboardDifficultyStatisticsResponse> difficultyStatistics = interviewRepository
+                .findDifficultyStatisticsByUserId(userId).stream()
+                .map(this::toDifficultyStatisticsResponse)
+                .toList();
+
+        boolean performanceAnalysisAvailable = !categoryStatistics.isEmpty() || !difficultyStatistics.isEmpty();
+
+        return DashboardWeaknessResponse.builder()
+                .performanceAnalysisAvailable(performanceAnalysisAvailable)
+                .unavailableReason(performanceAnalysisAvailable ? null : PERFORMANCE_ANALYSIS_UNAVAILABLE_REASON)
+                .weakestCategory(categoryStatistics.isEmpty() ? null : categoryStatistics.get(0).getCategory())
+                .weakestDifficulty(difficultyStatistics.isEmpty() ? null : difficultyStatistics.get(0).getDifficulty())
+                .categoryStatistics(categoryStatistics)
+                .difficultyStatistics(difficultyStatistics)
+                .build();
+    }
+
+    private DashboardCategoryStatisticsResponse toCategoryStatisticsResponse(
+            DashboardCategoryStatisticsProjection projection) {
+        return DashboardCategoryStatisticsResponse.builder()
+                .category(projection.getCategory())
+                .interviewCount(projection.getInterviewCount())
+                .questionCount(projection.getEvaluationCount())
+                .evaluationCount(projection.getEvaluationCount())
+                .averageScore(projection.getAverageScore())
+                .build();
+    }
+
+    private DashboardDifficultyStatisticsResponse toDifficultyStatisticsResponse(
+            DashboardDifficultyStatisticsProjection projection) {
+        return DashboardDifficultyStatisticsResponse.builder()
+                .difficulty(projection.getDifficulty())
+                .interviewCount(projection.getInterviewCount())
+                .questionCount(projection.getEvaluationCount())
+                .evaluationCount(projection.getEvaluationCount())
+                .averageScore(projection.getAverageScore())
+                .build();
     }
 }

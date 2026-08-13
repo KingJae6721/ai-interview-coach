@@ -4,6 +4,7 @@ import com.aiinterview.dashboard.dto.DashboardSummaryResponse;
 import com.aiinterview.dashboard.dto.DashboardScoreTrendResponse;
 import com.aiinterview.dashboard.dto.DashboardAnalyticsPeriod;
 import com.aiinterview.dashboard.dto.DashboardAnalyticsResponse;
+import com.aiinterview.dashboard.dto.DashboardWeaknessResponse;
 
 import java.util.List;
 
@@ -14,4 +15,6 @@ public interface DashboardService {
     List<DashboardScoreTrendResponse> getScoreTrend(Long userId, int limit);
 
     List<DashboardAnalyticsResponse> getAnalytics(Long userId, DashboardAnalyticsPeriod period, int limit);
+
+    DashboardWeaknessResponse getWeaknesses(Long userId);
 }

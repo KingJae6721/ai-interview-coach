@@ -486,6 +486,33 @@ Feedback 생성
 
 ---
 
+## 질문별 답변 평가
+
+### POST /api/v1/answers/{answerId}/evaluation
+
+로그인 사용자는 본인 면접의 저장된 답변을 한 번만 AI 평가할 수 있다.
+
+### Success Response
+
+```json
+{
+  "success": true,
+  "code": "SUCCESS",
+  "message": "Success",
+  "data": {
+    "evaluationId": 1,
+    "answerId": 10,
+    "score": 85,
+    "strengths": "핵심 개념을 정확히 설명했습니다.",
+    "weaknesses": "구체적인 사례가 부족합니다.",
+    "improvementSuggestion": "실제 적용 경험을 함께 설명해 보세요.",
+    "reasoning": "질문의 핵심을 충족했으나 깊이가 일부 부족합니다."
+  }
+}
+```
+
+---
+
 # Interview Answer Order Policy
 
 `POST /api/v1/interviews/questions/{questionId}/answers` accepts only the first unanswered question in `questionOrder` sequence while the interview is `IN_PROGRESS`.
@@ -798,6 +825,48 @@ Only the completed interview owner can retrieve the questions, submitted answers
       "scoreChange": 5.0
     }
   ]
+}
+```
+
+---
+
+## 카테고리·난이도 약점 분석
+
+### GET /dashboard/weaknesses
+
+완료 면접에 속하고 QuestionEvaluation이 존재하는 답변만 카테고리·난이도별로 집계한다. 가장 낮은 평균 점수를 약점으로 선택하며, 동점이면 평가 수가 많은 항목, 그마저 동점이면 enum 이름 오름차순을 적용한다.
+
+### Response
+
+```json
+{
+  "success": true,
+  "code": "SUCCESS",
+  "message": "Success",
+  "data": {
+    "performanceAnalysisAvailable": true,
+    "unavailableReason": null,
+    "weakestCategory": "CS",
+    "weakestDifficulty": "HARD",
+    "categoryStatistics": [
+      {
+        "category": "TECH_STACK",
+        "interviewCount": 3,
+        "questionCount": 6,
+        "evaluationCount": 6,
+        "averageScore": 72.5
+      }
+    ],
+    "difficultyStatistics": [
+      {
+        "difficulty": "MEDIUM",
+        "interviewCount": 3,
+        "questionCount": 9,
+        "evaluationCount": 9,
+        "averageScore": 75.0
+      }
+    ]
+  }
 }
 ```
 
