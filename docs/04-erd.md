@@ -243,3 +243,28 @@ Table feedbacks {
 
   updated_at timestamp
 }
+
+// =========================
+// QUESTION EVALUATION
+// =========================
+
+Table question_evaluations {
+  id bigint [pk, increment]
+
+  answer_id bigint [not null, unique, ref: > answers.id]
+
+  score int [not null]
+
+  strengths text [not null]
+
+  weaknesses text [not null]
+
+  improvement_suggestion text [not null]
+
+  reasoning text [not null]
+
+  ai_model varchar(50) [not null]
+
+  created_at timestamp
+  updated_at timestamp
+}

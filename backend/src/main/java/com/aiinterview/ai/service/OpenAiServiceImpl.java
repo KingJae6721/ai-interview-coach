@@ -2,8 +2,11 @@ package com.aiinterview.ai.service;
 
 import com.aiinterview.ai.dto.InterviewFeedbackRequest;
 import com.aiinterview.ai.dto.InterviewFeedbackResult;
+import com.aiinterview.ai.dto.QuestionEvaluationRequest;
+import com.aiinterview.ai.dto.QuestionEvaluationResult;
 import com.aiinterview.ai.prompt.FeedbackPromptBuilder;
 import com.aiinterview.ai.prompt.FollowUpQuestionPromptBuilder;
+import com.aiinterview.ai.prompt.QuestionEvaluationPromptBuilder;
 import com.aiinterview.common.code.ErrorCode;
 import com.aiinterview.common.exception.BusinessException;
 import com.fasterxml.jackson.core.JsonProcessingException;
@@ -131,6 +134,33 @@ public class OpenAiServiceImpl implements OpenAiService {
         }
     }
 
+    @Override
+    public QuestionEvaluationResult evaluateQuestionAnswer(QuestionEvaluationRequest request) {
+        if (!StringUtils.hasText(apiKey)) {
+            throw new BusinessException(ErrorCode.AI_REQUEST_FAILED);
+        }
+
+        try {
+            String responseBody = restClient.post()
+                    .uri("/chat/completions")
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .body(Map.of(
+                            "model", model,
+                            "messages", List.of(
+                                    Map.of("role", "system", "content", QuestionEvaluationPromptBuilder.buildSystemPrompt()),
+                                    Map.of("role", "user", "content", QuestionEvaluationPromptBuilder.buildUserPrompt(request))
+                            ),
+                            "response_format", questionEvaluationResponseFormat()
+                    ))
+                    .retrieve()
+                    .body(String.class);
+
+            return extractQuestionEvaluation(responseBody);
+        } catch (RestClientException | JsonProcessingException e) {
+            throw new BusinessException(ErrorCode.AI_REQUEST_FAILED);
+        }
+    }
+
     private List<String> extractQuestions(String responseBody) throws JsonProcessingException {
         JsonNode response = objectMapper.readTree(responseBody);
         JsonNode content = response.at("/choices/0/message/content");
@@ -191,6 +221,30 @@ public class OpenAiServiceImpl implements OpenAiService {
         );
     }
 
+    private Map<String, Object> questionEvaluationResponseFormat() {
+        return Map.of(
+                "type", "json_schema",
+                "json_schema", Map.of(
+                        "name", "question_evaluation",
+                        "strict", true,
+                        "schema", Map.of(
+                                "type", "object",
+                                "properties", Map.of(
+                                        "score", Map.of("type", "integer", "minimum", 0, "maximum", 100),
+                                        "strengths", Map.of("type", "string"),
+                                        "weaknesses", Map.of("type", "string"),
+                                        "improvementSuggestion", Map.of("type", "string"),
+                                        "reasoning", Map.of("type", "string")
+                                ),
+                                "required", List.of(
+                                        "score", "strengths", "weaknesses", "improvementSuggestion", "reasoning"
+                                ),
+                                "additionalProperties", false
+                        )
+                )
+        );
+    }
+
     private InterviewFeedbackResult extractFeedback(String responseBody) throws JsonProcessingException {
         JsonNode response = objectMapper.readTree(responseBody);
         JsonNode content = response.at("/choices/0/message/content");
@@ -212,6 +266,30 @@ public class OpenAiServiceImpl implements OpenAiService {
                 .weaknesses(getRequiredText(feedback, "weaknesses"))
                 .improvementSuggestions(getRequiredText(feedback, "improvementSuggestions"))
                 .summary(getRequiredText(feedback, "summary"))
+                .aiModel(model)
+                .build();
+    }
+
+    private QuestionEvaluationResult extractQuestionEvaluation(String responseBody) throws JsonProcessingException {
+        JsonNode response = objectMapper.readTree(responseBody);
+        JsonNode content = response.at("/choices/0/message/content");
+
+        if (!content.isTextual()) {
+            throw new BusinessException(ErrorCode.AI_REQUEST_FAILED);
+        }
+
+        JsonNode evaluation = objectMapper.readTree(content.asText());
+        JsonNode score = evaluation.get("score");
+        if (score == null || !score.canConvertToInt() || score.intValue() < 0 || score.intValue() > 100) {
+            throw new BusinessException(ErrorCode.AI_REQUEST_FAILED);
+        }
+
+        return QuestionEvaluationResult.builder()
+                .score(score.intValue())
+                .strengths(getRequiredText(evaluation, "strengths"))
+                .weaknesses(getRequiredText(evaluation, "weaknesses"))
+                .improvementSuggestion(getRequiredText(evaluation, "improvementSuggestion"))
+                .reasoning(getRequiredText(evaluation, "reasoning"))
                 .aiModel(model)
                 .build();
     }
