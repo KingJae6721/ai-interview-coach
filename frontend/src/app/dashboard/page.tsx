@@ -28,6 +28,12 @@ export default function DashboardPage() {
             <p className="mt-2 text-sm text-zinc-500">
               다음 Sprint에서 면접 통계와 최근 기록을 연결합니다.
             </p>
+            <Link
+              href="/interviews/new"
+              className="mt-6 inline-block rounded-lg bg-zinc-900 px-5 py-2.5 text-sm font-medium text-white hover:bg-zinc-700"
+            >
+              새 면접 만들기
+            </Link>
           </section>
         </div>
       </main>
