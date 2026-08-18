@@ -2,7 +2,7 @@ package com.aiinterview.evaluation.service;
 
 import com.aiinterview.ai.dto.QuestionEvaluationRequest;
 import com.aiinterview.ai.dto.QuestionEvaluationResult;
-import com.aiinterview.ai.service.OpenAiService;
+import com.aiinterview.ai.service.AiService;
 import com.aiinterview.common.code.ErrorCode;
 import com.aiinterview.common.exception.BusinessException;
 import com.aiinterview.evaluation.dto.QuestionEvaluationResponse;
@@ -21,12 +21,12 @@ public class QuestionEvaluationServiceImpl implements QuestionEvaluationService 
     private final InterviewAnswerRepository interviewAnswerRepository;
     private final QuestionEvaluationRepository questionEvaluationRepository;
     private final QuestionEvaluationPersistenceService questionEvaluationPersistenceService;
-    private final OpenAiService openAiService;
+    private final AiService aiService;
 
     @Override
     public QuestionEvaluationResponse evaluate(Long userId, Long answerId) {
         QuestionEvaluationRequest request = prepareEvaluationRequest(userId, answerId);
-        QuestionEvaluationResult result = openAiService.evaluateQuestionAnswer(request);
+        QuestionEvaluationResult result = aiService.evaluateQuestionAnswer(request);
         QuestionEvaluation evaluation = questionEvaluationPersistenceService.save(answerId, result);
 
         return toResponse(evaluation);
