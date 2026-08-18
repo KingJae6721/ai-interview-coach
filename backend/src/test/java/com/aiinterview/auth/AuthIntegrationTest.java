@@ -100,6 +100,7 @@ class AuthIntegrationTest {
                 mockMvc.perform(get("/api/v1/users/me").header("Authorization", "Bearer " + loginTokens.accessToken()))
                                 .andExpect(status().isOk());
 
+                Thread.sleep(1000);
                 Tokens rotatedTokens = reissue(loginTokens.refreshToken());
                 assertThat(rotatedTokens.accessToken()).isNotEqualTo(loginTokens.accessToken());
                 assertThat(rotatedTokens.refreshToken()).isNotEqualTo(loginTokens.refreshToken());
