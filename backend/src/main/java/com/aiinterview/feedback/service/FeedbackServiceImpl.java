@@ -2,12 +2,15 @@ package com.aiinterview.feedback.service;
 
 import com.aiinterview.ai.dto.InterviewFeedbackRequest;
 import com.aiinterview.ai.dto.InterviewFeedbackResult;
-import com.aiinterview.ai.service.OpenAiService;
+import com.aiinterview.ai.service.AiService;
 import com.aiinterview.common.code.ErrorCode;
 import com.aiinterview.common.exception.BusinessException;
+import com.aiinterview.evaluation.entity.QuestionEvaluation;
+import com.aiinterview.evaluation.repository.QuestionEvaluationRepository;
 import com.aiinterview.feedback.dto.FeedbackGenerateResponse;
 import com.aiinterview.feedback.dto.InterviewResultFeedbackResponse;
 import com.aiinterview.feedback.dto.InterviewResultQuestionAnswerResponse;
+import com.aiinterview.feedback.dto.InterviewResultQuestionEvaluationResponse;
 import com.aiinterview.feedback.dto.InterviewResultResponse;
 import com.aiinterview.feedback.entity.Feedback;
 import com.aiinterview.feedback.repository.FeedbackRepository;
@@ -18,6 +21,7 @@ import com.aiinterview.interview.entity.InterviewStatus;
 import com.aiinterview.interview.repository.InterviewAnswerRepository;
 import com.aiinterview.interview.repository.InterviewQuestionRepository;
 import com.aiinterview.interview.repository.InterviewRepository;
+import com.aiinterview.interview.service.InterviewQuestionExecutionOrderResolver;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.dao.DataIntegrityViolationException;
@@ -39,13 +43,15 @@ public class FeedbackServiceImpl implements FeedbackService {
     private final InterviewRepository interviewRepository;
     private final InterviewQuestionRepository interviewQuestionRepository;
     private final InterviewAnswerRepository interviewAnswerRepository;
-    private final OpenAiService openAiService;
+    private final QuestionEvaluationRepository questionEvaluationRepository;
+    private final InterviewQuestionExecutionOrderResolver interviewQuestionExecutionOrderResolver;
+    private final AiService aiService;
 
     @Override
     @Transactional(propagation = Propagation.NOT_SUPPORTED)
     public FeedbackGenerateResponse generateFeedback(Long userId, Long interviewId) {
         InterviewFeedbackRequest request = prepareFeedbackRequest(userId, interviewId);
-        InterviewFeedbackResult result = openAiService.generateInterviewFeedback(request);
+        InterviewFeedbackResult result = aiService.generateInterviewFeedback(request);
         Feedback feedback = saveFeedback(interviewId, result);
 
         log.info("Interview feedback generated - interviewId: {}, feedbackId: {}", interviewId, feedback.getId());
@@ -64,7 +70,7 @@ public class FeedbackServiceImpl implements FeedbackService {
     @Override
     @Transactional(readOnly = true)
     public InterviewResultResponse getInterviewResult(Long userId, Long interviewId) {
-        Interview interview = interviewRepository.findWithUserById(interviewId)
+        Interview interview = interviewRepository.findWithUserAndJobPositionAndCompanyById(interviewId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.INTERVIEW_NOT_FOUND));
 
         validateCompletedInterviewOwner(userId, interview);
@@ -72,8 +78,8 @@ public class FeedbackServiceImpl implements FeedbackService {
         Feedback feedback = feedbackRepository.findByInterviewId(interviewId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.FEEDBACK_NOT_FOUND));
 
-        List<InterviewQuestion> questions = interviewQuestionRepository
-                .findByInterviewIdOrderByQuestionOrderAsc(interviewId);
+        List<InterviewQuestion> questions = interviewQuestionExecutionOrderResolver.resolve(
+                interviewQuestionRepository.findAllByInterviewIdWithParentOrderByQuestionOrderAsc(interviewId));
         List<InterviewAnswer> answers = interviewAnswerRepository.findAllByInterviewIdWithQuestion(interviewId);
         validateQuestionAnswers(questions, answers);
 
@@ -83,14 +89,22 @@ public class FeedbackServiceImpl implements FeedbackService {
                         Function.identity()
                 ));
 
+        Map<Long, QuestionEvaluation> evaluationByAnswerId = questionEvaluationRepository
+                .findAllByInterviewIdWithAnswer(interviewId).stream()
+                .collect(Collectors.toMap(evaluation -> evaluation.getAnswer().getId(), Function.identity()));
+
         List<InterviewResultQuestionAnswerResponse> questionAnswers = questions.stream()
-                .map(question -> toQuestionAnswerResponse(question, answerByQuestionId.get(question.getId())))
+                .map(question -> toQuestionAnswerResponse(question, answerByQuestionId.get(question.getId()),
+                        evaluationByAnswerId.get(answerByQuestionId.get(question.getId()).getId())))
                 .toList();
 
         return InterviewResultResponse.builder()
                 .interviewId(interview.getId())
                 .title(interview.getTitle())
                 .status(interview.getStatus())
+                .completedAt(interview.getCompletedAt())
+                .companyName(interview.getJobPosition() == null ? null : interview.getJobPosition().getCompany().getName())
+                .positionName(interview.getJobPosition() == null ? null : interview.getJobPosition().getName())
                 .questionAnswers(questionAnswers)
                 .feedback(toFeedbackResponse(feedback))
                 .build();
@@ -102,8 +116,8 @@ public class FeedbackServiceImpl implements FeedbackService {
 
         validateFeedbackGeneration(userId, interview);
 
-        List<InterviewQuestion> questions = interviewQuestionRepository
-                .findByInterviewIdOrderByQuestionOrderAsc(interviewId);
+        List<InterviewQuestion> questions = interviewQuestionExecutionOrderResolver.resolve(
+                interviewQuestionRepository.findAllByInterviewIdWithParentOrderByQuestionOrderAsc(interviewId));
         List<InterviewAnswer> answers = interviewAnswerRepository.findAllByInterviewIdWithQuestion(interviewId);
         validateQuestionAnswers(questions, answers);
 
@@ -169,12 +183,30 @@ public class FeedbackServiceImpl implements FeedbackService {
     }
 
     private InterviewResultQuestionAnswerResponse toQuestionAnswerResponse(InterviewQuestion question,
-                                                                            InterviewAnswer answer) {
+                                                                            InterviewAnswer answer,
+                                                                            QuestionEvaluation evaluation) {
         return InterviewResultQuestionAnswerResponse.builder()
+                .questionId(question.getId())
+                .parentQuestionId(question.getParentQuestion() == null ? null : question.getParentQuestion().getId())
                 .questionOrder(question.getQuestionOrder())
                 .questionContent(question.getContent())
+                .category(question.getCategory())
+                .difficulty(question.getDifficulty())
+                .followUp(question.getParentQuestion() != null)
                 .answerContent(answer.getAnswerContent())
                 .answeredAt(answer.getAnsweredAt())
+                .evaluation(evaluation == null ? null : toQuestionEvaluationResponse(evaluation))
+                .build();
+    }
+
+    private InterviewResultQuestionEvaluationResponse toQuestionEvaluationResponse(QuestionEvaluation evaluation) {
+        return InterviewResultQuestionEvaluationResponse.builder()
+                .evaluationId(evaluation.getId())
+                .score(evaluation.getScore())
+                .strengths(evaluation.getStrengths())
+                .weaknesses(evaluation.getWeaknesses())
+                .improvementSuggestion(evaluation.getImprovementSuggestion())
+                .reasoning(evaluation.getReasoning())
                 .build();
     }
 
