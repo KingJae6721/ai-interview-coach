@@ -372,13 +372,17 @@ Question 저장
 
 ## 면접 시작
 
-### POST /interviews/{id}/start
+### POST /api/v1/interviews/{interviewId}/start
+
+Only the owner can start an interview in `READY`. Questions are already generated when the interview is created.
 
 ### Response
 
 ```json
 {
-  "status":"IN_PROGRESS"
+  "interviewId": 10,
+  "status":"IN_PROGRESS",
+  "startedAt":"2026-08-18T15:00:00"
 }
 ```
 
@@ -441,7 +445,30 @@ Question 저장
 
 ## 면접 상세
 
-### GET /interviews/{id}
+### GET /api/v1/interviews/{interviewId}
+
+The authenticated owner can retrieve interview state without changing it. Use `status` to choose Start, Progress, or Result navigation.
+
+### Response
+
+```json
+{
+  "success": true,
+  "code": "SUCCESS",
+  "message": "Success",
+  "data": {
+    "interviewId": 10,
+    "title": "Backend Interview",
+    "status": "IN_PROGRESS",
+    "createdAt": "2026-08-18T14:00:00",
+    "startedAt": "2026-08-18T14:05:00",
+    "completedAt": null,
+    "jobPositionId": 1,
+    "positionName": "Backend Developer",
+    "companyName": "AI Interview"
+  }
+}
+```
 
 ---
 
@@ -556,7 +583,7 @@ Requests for an answered question return `INTERVIEW_ANSWER_ALREADY_EXISTS`; requ
 
 ## POST /api/v1/ai/questions/{questionId}/follow-up
 
-The authenticated interview owner can generate at most one follow-up question from the saved answer.
+The authenticated interview owner can generate at most one follow-up question from a saved base-question answer. A follow-up question cannot generate another follow-up question. Progress exposes a generated follow-up immediately after its parent question.
 
 ### Success Response
 
@@ -676,6 +703,8 @@ Only the owner can complete an interview in `IN_PROGRESS` after every question, 
 ### GET /api/v1/interviews/{interviewId}/progress
 
 Only the interview owner can retrieve an interview that is currently in progress.
+Questions are returned in execution order: each base question is followed by its generated follow-up, when present.
+`READY` returns `INTERVIEW_NOT_STARTED`; `COMPLETED` returns `INTERVIEW_ALREADY_COMPLETED`.
 
 ### Success Response
 
@@ -724,12 +753,28 @@ Only the completed interview owner can retrieve the questions, submitted answers
     "interviewId": 10,
     "title": "Backend Interview",
     "status": "COMPLETED",
+    "completedAt": "2026-08-06T10:30:00",
+    "companyName": "AI Interview",
+    "positionName": "Backend Developer",
     "questionAnswers": [
       {
+        "questionId": 1,
+        "parentQuestionId": null,
         "questionOrder": 1,
         "questionContent": "...",
+        "category": "TECH_STACK",
+        "difficulty": "MEDIUM",
+        "followUp": false,
         "answerContent": "...",
-        "answeredAt": "2026-08-06T10:00:00"
+        "answeredAt": "2026-08-06T10:00:00",
+        "evaluation": {
+          "evaluationId": 1,
+          "score": 85,
+          "strengths": "...",
+          "weaknesses": "...",
+          "improvementSuggestion": "...",
+          "reasoning": "..."
+        }
       }
     ],
     "feedback": {
