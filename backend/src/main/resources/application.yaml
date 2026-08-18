@@ -41,7 +41,14 @@ jwt:
   expiration: 1800000 # 30 minutes (30 * 60 * 1000 ms)
   refresh-expiration: 1209600000 # 14 days (14 * 24 * 60 * 60 * 1000 ms)
 
-openai:
-  base-url: ${OPENAI_BASE_URL:https://api.openai.com/v1}
-  api-key: ${OPENAI_API_KEY:}
-  model: ${OPENAI_MODEL:gpt-4o-mini}
+ai:
+  provider: ${AI_PROVIDER:groq}
+  timeout-seconds: ${AI_TIMEOUT_SECONDS:30}
+  openai:
+    base-url: ${OPENAI_BASE_URL:https://api.openai.com/v1}
+    api-key: ${OPENAI_API_KEY:}
+    model: ${OPENAI_MODEL:gpt-4o-mini}
+  groq:
+    base-url: ${GROQ_BASE_URL:https://api.groq.com/openai/v1}
+    api-key: ${GROQ_API_KEY:}
+    model: ${GROQ_MODEL:openai/gpt-oss-20b}

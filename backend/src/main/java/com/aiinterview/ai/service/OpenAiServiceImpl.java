@@ -7,25 +7,25 @@ import com.aiinterview.ai.dto.QuestionEvaluationResult;
 import com.aiinterview.ai.prompt.FeedbackPromptBuilder;
 import com.aiinterview.ai.prompt.FollowUpQuestionPromptBuilder;
 import com.aiinterview.ai.prompt.QuestionEvaluationPromptBuilder;
+import com.aiinterview.ai.provider.AiCompletionRequest;
+import com.aiinterview.ai.provider.AiProvider;
 import com.aiinterview.common.code.ErrorCode;
 import com.aiinterview.common.exception.BusinessException;
+import lombok.extern.slf4j.Slf4j;
 import tools.jackson.core.JacksonException;
 import tools.jackson.core.type.TypeReference;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.ObjectMapper;
-import org.springframework.beans.factory.annotation.Value;
-import org.springframework.http.MediaType;
 import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
-import org.springframework.web.client.RestClient;
-import org.springframework.web.client.RestClientException;
 
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 
 @Service
-public class OpenAiServiceImpl implements OpenAiService {
+@Slf4j
+public class OpenAiServiceImpl implements AiService {
 
     private static final int QUESTION_COUNT = 5;
 
@@ -36,128 +36,62 @@ public class OpenAiServiceImpl implements OpenAiService {
             Return only a JSON array of five strings. Do not include markdown, explanations, or numbering.
             """;
 
-    private final RestClient restClient;
+    private final AiProvider aiProvider;
     private final ObjectMapper objectMapper;
-    private final String model;
-    private final String apiKey;
 
-    public OpenAiServiceImpl(
-            ObjectMapper objectMapper,
-            @Value("${openai.base-url:https://api.openai.com/v1}") String baseUrl,
-            @Value("${openai.api-key:}") String apiKey,
-            @Value("${openai.model:gpt-4o-mini}") String model) {
-        this.restClient = RestClient.builder()
-                .baseUrl(baseUrl)
-                .defaultHeader("Authorization", "Bearer " + apiKey)
-                .build();
+    public OpenAiServiceImpl(ObjectMapper objectMapper, AiProvider aiProvider) {
         this.objectMapper = objectMapper;
-        this.apiKey = apiKey;
-        this.model = model;
+        this.aiProvider = aiProvider;
     }
 
     @Override
     public List<String> generateInterviewQuestions(String questionGenerationPrompt) {
-        if (!StringUtils.hasText(apiKey)) {
-            throw new BusinessException(ErrorCode.AI_REQUEST_FAILED);
-        }
-
         try {
-            String responseBody = restClient.post()
-                    .uri("/chat/completions")
-                    .contentType(MediaType.APPLICATION_JSON)
-                    .body(Map.of(
-                            "model", model,
-                            "messages", List.of(
-                                    Map.of("role", "system", "content", QUESTION_GENERATION_PROMPT),
-                                    Map.of("role", "user", "content", questionGenerationPrompt)
-                            )
-                    ))
-                    .retrieve()
-                    .body(String.class);
+            String responseBody = aiProvider.complete(new AiCompletionRequest(
+                    QUESTION_GENERATION_PROMPT, questionGenerationPrompt, null));
 
             return extractQuestions(responseBody);
-        } catch (RestClientException | JacksonException e) {
-            throw new BusinessException(ErrorCode.AI_REQUEST_FAILED);
+        } catch (JacksonException e) {
+            throw jsonDeserializationFailed(e);
         }
     }
 
     @Override
     public Optional<String> generateFollowUpQuestion(String answerContent) {
-        if (!StringUtils.hasText(apiKey)) {
-            throw new BusinessException(ErrorCode.AI_REQUEST_FAILED);
-        }
-
         try {
-            String responseBody = restClient.post()
-                    .uri("/chat/completions")
-                    .contentType(MediaType.APPLICATION_JSON)
-                    .body(Map.of(
-                            "model", model,
-                            "messages", List.of(
-                                    Map.of("role", "system", "content", FollowUpQuestionPromptBuilder.buildSystemPrompt()),
-                                    Map.of("role", "user", "content", FollowUpQuestionPromptBuilder.buildUserPrompt(answerContent))
-                            )
-                    ))
-                    .retrieve()
-                    .body(String.class);
+            String responseBody = aiProvider.complete(new AiCompletionRequest(
+                    FollowUpQuestionPromptBuilder.buildSystemPrompt(),
+                    FollowUpQuestionPromptBuilder.buildUserPrompt(answerContent), null));
 
             return extractFollowUpQuestion(responseBody);
-        } catch (RestClientException | JacksonException e) {
-            throw new BusinessException(ErrorCode.AI_REQUEST_FAILED);
+        } catch (JacksonException e) {
+            throw jsonDeserializationFailed(e);
         }
     }
 
     @Override
     public InterviewFeedbackResult generateInterviewFeedback(InterviewFeedbackRequest request) {
-        if (!StringUtils.hasText(apiKey)) {
-            throw new BusinessException(ErrorCode.AI_REQUEST_FAILED);
-        }
-
         try {
-            String responseBody = restClient.post()
-                    .uri("/chat/completions")
-                    .contentType(MediaType.APPLICATION_JSON)
-                    .body(Map.of(
-                            "model", model,
-                            "messages", List.of(
-                                    Map.of("role", "system", "content", FeedbackPromptBuilder.buildSystemPrompt()),
-                                    Map.of("role", "user", "content", FeedbackPromptBuilder.buildUserPrompt(request))
-                            ),
-                            "response_format", feedbackResponseFormat()
-                    ))
-                    .retrieve()
-                    .body(String.class);
+            String responseBody = aiProvider.complete(new AiCompletionRequest(
+                    FeedbackPromptBuilder.buildSystemPrompt(), FeedbackPromptBuilder.buildUserPrompt(request),
+                    feedbackResponseFormat()));
 
             return extractFeedback(responseBody);
-        } catch (RestClientException | JacksonException e) {
-            throw new BusinessException(ErrorCode.AI_REQUEST_FAILED);
+        } catch (JacksonException e) {
+            throw jsonDeserializationFailed(e);
         }
     }
 
     @Override
     public QuestionEvaluationResult evaluateQuestionAnswer(QuestionEvaluationRequest request) {
-        if (!StringUtils.hasText(apiKey)) {
-            throw new BusinessException(ErrorCode.AI_REQUEST_FAILED);
-        }
-
         try {
-            String responseBody = restClient.post()
-                    .uri("/chat/completions")
-                    .contentType(MediaType.APPLICATION_JSON)
-                    .body(Map.of(
-                            "model", model,
-                            "messages", List.of(
-                                    Map.of("role", "system", "content", QuestionEvaluationPromptBuilder.buildSystemPrompt()),
-                                    Map.of("role", "user", "content", QuestionEvaluationPromptBuilder.buildUserPrompt(request))
-                            ),
-                            "response_format", questionEvaluationResponseFormat()
-                    ))
-                    .retrieve()
-                    .body(String.class);
+            String responseBody = aiProvider.complete(new AiCompletionRequest(
+                    QuestionEvaluationPromptBuilder.buildSystemPrompt(),
+                    QuestionEvaluationPromptBuilder.buildUserPrompt(request), questionEvaluationResponseFormat()));
 
             return extractQuestionEvaluation(responseBody);
-        } catch (RestClientException | JacksonException e) {
-            throw new BusinessException(ErrorCode.AI_REQUEST_FAILED);
+        } catch (JacksonException e) {
+            throw jsonDeserializationFailed(e);
         }
     }
 
@@ -166,14 +100,14 @@ public class OpenAiServiceImpl implements OpenAiService {
         JsonNode content = response.at("/choices/0/message/content");
 
         if (!content.isTextual()) {
-            throw new BusinessException(ErrorCode.AI_REQUEST_FAILED);
+            throw unexpectedResponseFormat();
         }
 
-        List<String> questions = objectMapper.readValue(content.asText(), new TypeReference<>() {
+        List<String> questions = objectMapper.readValue(removeJsonCodeFence(content.asText()), new TypeReference<>() {
         });
 
         if (questions.size() != QUESTION_COUNT || questions.stream().anyMatch(question -> !StringUtils.hasText(question))) {
-            throw new BusinessException(ErrorCode.AI_REQUEST_FAILED);
+            throw unexpectedResponseFormat();
         }
 
         return questions;
@@ -184,7 +118,7 @@ public class OpenAiServiceImpl implements OpenAiService {
         JsonNode content = response.at("/choices/0/message/content");
 
         if (!content.isTextual()) {
-            throw new BusinessException(ErrorCode.AI_REQUEST_FAILED);
+            throw unexpectedResponseFormat();
         }
 
         String followUpQuestion = content.asText().trim();
@@ -192,7 +126,7 @@ public class OpenAiServiceImpl implements OpenAiService {
             return Optional.empty();
         }
         if (!StringUtils.hasText(followUpQuestion)) {
-            throw new BusinessException(ErrorCode.AI_REQUEST_FAILED);
+            throw unexpectedResponseFormat();
         }
         return Optional.of(followUpQuestion);
     }
@@ -250,14 +184,14 @@ public class OpenAiServiceImpl implements OpenAiService {
         JsonNode content = response.at("/choices/0/message/content");
 
         if (!content.isTextual()) {
-            throw new BusinessException(ErrorCode.AI_REQUEST_FAILED);
+            throw unexpectedResponseFormat();
         }
 
         JsonNode feedback = objectMapper.readTree(content.asText());
         JsonNode overallScore = feedback.get("overallScore");
         if (overallScore == null || !overallScore.canConvertToInt()
                 || overallScore.intValue() < 0 || overallScore.intValue() > 100) {
-            throw new BusinessException(ErrorCode.AI_REQUEST_FAILED);
+            throw unexpectedResponseFormat();
         }
 
         return InterviewFeedbackResult.builder()
@@ -266,7 +200,7 @@ public class OpenAiServiceImpl implements OpenAiService {
                 .weaknesses(getRequiredText(feedback, "weaknesses"))
                 .improvementSuggestions(getRequiredText(feedback, "improvementSuggestions"))
                 .summary(getRequiredText(feedback, "summary"))
-                .aiModel(model)
+                .aiModel(aiProvider.getModel())
                 .build();
     }
 
@@ -275,13 +209,13 @@ public class OpenAiServiceImpl implements OpenAiService {
         JsonNode content = response.at("/choices/0/message/content");
 
         if (!content.isTextual()) {
-            throw new BusinessException(ErrorCode.AI_REQUEST_FAILED);
+            throw unexpectedResponseFormat();
         }
 
         JsonNode evaluation = objectMapper.readTree(content.asText());
         JsonNode score = evaluation.get("score");
         if (score == null || !score.canConvertToInt() || score.intValue() < 0 || score.intValue() > 100) {
-            throw new BusinessException(ErrorCode.AI_REQUEST_FAILED);
+            throw unexpectedResponseFormat();
         }
 
         return QuestionEvaluationResult.builder()
@@ -290,15 +224,38 @@ public class OpenAiServiceImpl implements OpenAiService {
                 .weaknesses(getRequiredText(evaluation, "weaknesses"))
                 .improvementSuggestion(getRequiredText(evaluation, "improvementSuggestion"))
                 .reasoning(getRequiredText(evaluation, "reasoning"))
-                .aiModel(model)
+                .aiModel(aiProvider.getModel())
                 .build();
     }
 
     private String getRequiredText(JsonNode feedback, String fieldName) {
         JsonNode field = feedback.get(fieldName);
         if (field == null || !field.isTextual() || !StringUtils.hasText(field.asText())) {
-            throw new BusinessException(ErrorCode.AI_REQUEST_FAILED);
+            throw unexpectedResponseFormat();
         }
         return field.asText();
+    }
+
+    private String removeJsonCodeFence(String content) {
+        String trimmed = content.trim();
+        if (!trimmed.startsWith("```")) {
+            return trimmed;
+        }
+        int firstLineEnd = trimmed.indexOf('\n');
+        if (firstLineEnd < 0 || !trimmed.endsWith("```")) {
+            return trimmed;
+        }
+        return trimmed.substring(firstLineEnd + 1, trimmed.length() - 3).trim();
+    }
+
+    private BusinessException jsonDeserializationFailed(JacksonException exception) {
+        log.error("AI response processing failed. reason=JSON_DESERIALIZATION_FAILED, errorType={}",
+                exception.getClass().getSimpleName());
+        return new BusinessException(ErrorCode.AI_REQUEST_FAILED);
+    }
+
+    private BusinessException unexpectedResponseFormat() {
+        log.error("AI response processing failed. reason=UNEXPECTED_RESPONSE_FORMAT");
+        return new BusinessException(ErrorCode.AI_REQUEST_FAILED);
     }
 }
