@@ -25,7 +25,7 @@ export function LoginForm({ initialMessage }: { initialMessage?: string }) {
         email: String(formData.get("email")).trim(),
         password: String(formData.get("password")),
       });
-      router.replace("/");
+      router.replace("/dashboard");
     } catch (error) {
       setErrorMessage(getErrorMessage(error));
     } finally {

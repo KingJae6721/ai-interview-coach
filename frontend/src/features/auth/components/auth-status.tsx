@@ -34,14 +34,28 @@ export function AuthStatus() {
         <p className="text-zinc-700">
           <strong>{user.nickname}</strong>님, 환영합니다.
         </p>
-        <button
-          type="button"
-          onClick={handleLogout}
-          disabled={isLoading}
-          className="mt-5 rounded-lg border border-zinc-300 px-5 py-2.5 text-sm font-medium hover:bg-zinc-50 disabled:cursor-not-allowed disabled:opacity-60"
-        >
-          {isLoading ? "로그아웃 중..." : "로그아웃"}
-        </button>
+        <div className="mt-5 flex flex-wrap gap-3">
+          <Link
+            href="/interviews/new"
+            className="rounded-lg bg-zinc-900 px-5 py-2.5 text-sm font-medium text-white hover:bg-zinc-700"
+          >
+            면접 준비하기
+          </Link>
+          <Link
+            href="/dashboard"
+            className="rounded-lg border border-zinc-300 px-5 py-2.5 text-sm font-medium hover:bg-zinc-50"
+          >
+            대시보드
+          </Link>
+          <button
+            type="button"
+            onClick={handleLogout}
+            disabled={isLoading}
+            className="rounded-lg border border-zinc-300 px-5 py-2.5 text-sm font-medium hover:bg-zinc-50 disabled:cursor-not-allowed disabled:opacity-60"
+          >
+            {isLoading ? "로그아웃 중..." : "로그아웃"}
+          </button>
+        </div>
         {errorMessage && (
           <p role="alert" className="mt-3 text-sm text-red-600">
             {errorMessage}
