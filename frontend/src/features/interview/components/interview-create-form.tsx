@@ -95,7 +95,7 @@ export function InterviewCreateForm() {
 
     try {
       const response = await createInterview({ title, jobPositionId });
-      router.push(`/interviews/${response.interviewId}`);
+      router.push(`/interviews/${response.interviewId}?start=ready`);
     } catch (error) {
       setCreateErrorMessage(getErrorMessage(error));
     } finally {

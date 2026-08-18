@@ -1,30 +1,34 @@
-import Link from "next/link";
+import { notFound } from "next/navigation";
 
 import { ProtectedRoute } from "@/features/auth/components/route-guards";
+import { InterviewProgress } from "@/features/interview/components/interview-progress";
 
 interface InterviewPageProps {
   params: Promise<{ interviewId: string }>;
+  searchParams: Promise<{ start?: string | string[] }>;
 }
 
-export default async function InterviewPage({ params }: InterviewPageProps) {
-  const { interviewId } = await params;
+export default async function InterviewPage({
+  params,
+  searchParams,
+}: InterviewPageProps) {
+  const { interviewId: interviewIdParam } = await params;
+  const { start } = await searchParams;
+  const interviewId = Number(interviewIdParam);
+
+  if (!Number.isSafeInteger(interviewId) || interviewId <= 0) {
+    notFound();
+  }
 
   return (
     <ProtectedRoute>
-      <main className="flex min-h-screen items-center justify-center bg-zinc-50 px-6">
-        <section className="w-full max-w-xl rounded-2xl border border-zinc-200 bg-white p-8 text-center shadow-sm">
-          <p className="text-sm font-medium text-emerald-700">면접 생성 완료</p>
-          <h1 className="mt-3 text-2xl font-semibold">면접 #{interviewId}</h1>
-          <p className="mt-3 text-sm text-zinc-600">
-            다음 Sprint에서 질문 조회와 면접 진행 화면을 연결합니다.
-          </p>
-          <Link
-            href="/dashboard"
-            className="mt-7 inline-block rounded-lg bg-zinc-900 px-5 py-2.5 text-sm font-medium text-white hover:bg-zinc-700"
-          >
-            대시보드로 이동
-          </Link>
-        </section>
+      <main className="min-h-screen bg-zinc-50 px-5 py-8 sm:px-6 sm:py-10">
+        <div className="mx-auto max-w-3xl">
+          <InterviewProgress
+            interviewId={interviewId}
+            initialReady={start === "ready"}
+          />
+        </div>
       </main>
     </ProtectedRoute>
   );
