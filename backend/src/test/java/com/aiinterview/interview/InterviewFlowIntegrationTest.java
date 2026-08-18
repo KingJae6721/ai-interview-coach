@@ -1,10 +1,12 @@
 package com.aiinterview.interview;
 
 import com.aiinterview.ai.dto.InterviewFeedbackResult;
-import com.aiinterview.ai.service.OpenAiService;
+import com.aiinterview.ai.service.AiService;
 import com.aiinterview.auth.JwtProvider;
 import com.aiinterview.company.entity.Company;
 import com.aiinterview.company.repository.CompanyRepository;
+import com.aiinterview.evaluation.entity.QuestionEvaluation;
+import com.aiinterview.evaluation.repository.QuestionEvaluationRepository;
 import com.aiinterview.feedback.repository.FeedbackRepository;
 import com.aiinterview.interview.entity.Interview;
 import com.aiinterview.interview.entity.InterviewStatus;
@@ -46,6 +48,8 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.BDDMockito.given;
+import static org.mockito.BDDMockito.then;
+import static org.mockito.Mockito.times;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
@@ -95,9 +99,11 @@ class InterviewFlowIntegrationTest {
     private InterviewAnswerRepository interviewAnswerRepository;
     @Autowired
     private FeedbackRepository feedbackRepository;
+    @Autowired
+    private QuestionEvaluationRepository questionEvaluationRepository;
 
     @MockitoBean
-    private OpenAiService openAiService;
+    private AiService aiService;
 
     private User owner;
     private User otherUser;
@@ -122,11 +128,11 @@ class InterviewFlowIntegrationTest {
         ownerToken = jwtProvider.createAccessToken(owner.getId(), owner.getRole());
         otherUserToken = jwtProvider.createAccessToken(otherUser.getId(), otherUser.getRole());
 
-        given(openAiService.generateInterviewQuestions(anyString()))
+        given(aiService.generateInterviewQuestions(anyString()))
                 .willReturn(List.of("Question 1", "Question 2", "Question 3", "Question 4", "Question 5"));
-        given(openAiService.generateFollowUpQuestion(anyString()))
+        given(aiService.generateFollowUpQuestion(anyString()))
                 .willReturn(Optional.of("Follow-up question"));
-        given(openAiService.generateInterviewFeedback(any()))
+        given(aiService.generateInterviewFeedback(any()))
                 .willReturn(InterviewFeedbackResult.builder()
                         .overallScore(90)
                         .strengths("Strong technical reasoning")
@@ -139,6 +145,7 @@ class InterviewFlowIntegrationTest {
 
     @AfterEach
     void tearDown() {
+        questionEvaluationRepository.deleteAll();
         feedbackRepository.deleteAll();
         interviewAnswerRepository.deleteAll();
         interviewQuestionRepository.deleteAll();
@@ -154,12 +161,71 @@ class InterviewFlowIntegrationTest {
         assertThat(interviewRepository.findById(interviewId))
                 .hasValueSatisfying(interview -> assertThat(interview.getStatus()).isEqualTo(InterviewStatus.READY));
 
+        mockMvc.perform(get("/api/v1/interviews/{interviewId}", interviewId)
+                        .header("Authorization", bearer(ownerToken)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value("SUCCESS"))
+                .andExpect(jsonPath("$.data.interviewId").value(interviewId))
+                .andExpect(jsonPath("$.data.status").value("READY"))
+                .andExpect(jsonPath("$.data.createdAt").exists())
+                .andExpect(jsonPath("$.data.startedAt").doesNotExist())
+                .andExpect(jsonPath("$.data.completedAt").doesNotExist())
+                .andExpect(jsonPath("$.data.jobPositionId").value(jobPosition.getId()))
+                .andExpect(jsonPath("$.data.positionName").value("Backend Developer"))
+                .andExpect(jsonPath("$.data.companyName").value("Example Corp"));
+        assertThat(interviewRepository.findById(interviewId))
+                .hasValueSatisfying(interview -> assertThat(interview.getStatus()).isEqualTo(InterviewStatus.READY));
+
+        mockMvc.perform(get("/api/v1/interviews/{interviewId}", interviewId)
+                        .header("Authorization", bearer(otherUserToken)))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.code").value("ACCESS_DENIED"));
+
+        mockMvc.perform(get("/api/v1/interviews/{interviewId}", Long.MAX_VALUE)
+                        .header("Authorization", bearer(ownerToken)))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.code").value("INTERVIEW_NOT_FOUND"));
+
         mockMvc.perform(get("/api/v1/interviews/{interviewId}/questions", interviewId)
                         .header("Authorization", bearer(ownerToken)))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.code").value("SUCCESS"));
         assertThat(interviewRepository.findById(interviewId))
-                .hasValueSatisfying(interview -> assertThat(interview.getStatus()).isEqualTo(InterviewStatus.IN_PROGRESS));
+                .hasValueSatisfying(interview -> assertThat(interview.getStatus()).isEqualTo(InterviewStatus.READY));
+
+        mockMvc.perform(get("/api/v1/interviews/{interviewId}/progress", interviewId)
+                        .header("Authorization", bearer(ownerToken)))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.code").value("INTERVIEW_NOT_STARTED"));
+
+        mockMvc.perform(post("/api/v1/interviews/{interviewId}/start", interviewId)
+                        .header("Authorization", bearer(otherUserToken)))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.code").value("ACCESS_DENIED"));
+
+        mockMvc.perform(post("/api/v1/interviews/{interviewId}/start", interviewId)
+                        .header("Authorization", bearer(ownerToken)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value("SUCCESS"))
+                .andExpect(jsonPath("$.data.status").value("IN_PROGRESS"))
+                .andExpect(jsonPath("$.data.startedAt").exists());
+        assertThat(interviewRepository.findById(interviewId))
+                .hasValueSatisfying(interview -> {
+                    assertThat(interview.getStatus()).isEqualTo(InterviewStatus.IN_PROGRESS);
+                    assertThat(interview.getStartedAt()).isNotNull();
+                });
+
+        mockMvc.perform(get("/api/v1/interviews/{interviewId}", interviewId)
+                        .header("Authorization", bearer(ownerToken)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.status").value("IN_PROGRESS"))
+                .andExpect(jsonPath("$.data.startedAt").exists())
+                .andExpect(jsonPath("$.data.completedAt").doesNotExist());
+
+        mockMvc.perform(post("/api/v1/interviews/{interviewId}/start", interviewId)
+                        .header("Authorization", bearer(ownerToken)))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.code").value("INTERVIEW_ALREADY_STARTED"));
 
         JsonNode progress = getProgress(interviewId, ownerToken);
         long firstQuestionId = progress.path("questions").get(0).path("questionId").asLong();
@@ -183,11 +249,31 @@ class InterviewFlowIntegrationTest {
                 .andExpect(status().isConflict())
                 .andExpect(jsonPath("$.code").value("INTERVIEW_ANSWER_ALREADY_EXISTS"));
 
-        mockMvc.perform(post("/api/v1/ai/questions/{questionId}/follow-up", firstQuestionId)
+        MvcResult followUpResult = mockMvc.perform(post("/api/v1/ai/questions/{questionId}/follow-up", firstQuestionId)
                         .header("Authorization", bearer(ownerToken)))
                 .andExpect(status().isCreated())
                 .andExpect(jsonPath("$.code").value("SUCCESS"))
-                .andExpect(jsonPath("$.data.parentQuestionId").value(firstQuestionId));
+                .andExpect(jsonPath("$.data.parentQuestionId").value(firstQuestionId))
+                .andReturn();
+        long followUpQuestionId = responseData(followUpResult).path("followUpQuestionId").asLong();
+
+        JsonNode followUpProgress = getProgress(interviewId, ownerToken);
+        assertThat(followUpProgress.path("questions").get(0).path("questionId").asLong()).isEqualTo(firstQuestionId);
+        assertThat(followUpProgress.path("questions").get(1).path("questionId").asLong())
+                .isEqualTo(followUpQuestionId);
+        assertThat(followUpProgress.path("questions").get(2).path("questionId").asLong()).isEqualTo(secondQuestionId);
+        assertThat(followUpProgress.path("nextQuestionId").asLong()).isEqualTo(followUpQuestionId);
+
+        mockMvc.perform(post("/api/v1/ai/questions/{questionId}/follow-up", firstQuestionId)
+                        .header("Authorization", bearer(ownerToken)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.created").value(false));
+
+        mockMvc.perform(post("/api/v1/ai/questions/{questionId}/follow-up", followUpQuestionId)
+                        .header("Authorization", bearer(ownerToken)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.created").value(false));
+        then(aiService).should(times(1)).generateFollowUpQuestion(anyString());
 
         mockMvc.perform(post("/api/v1/interviews/{interviewId}/complete", interviewId)
                         .header("Authorization", bearer(ownerToken)))
@@ -195,7 +281,12 @@ class InterviewFlowIntegrationTest {
                 .andExpect(jsonPath("$.code").value("INTERVIEW_NOT_COMPLETABLE"))
                 .andExpect(jsonPath("$.data.allAnswered").value(false))
                 .andExpect(jsonPath("$.data.unansweredCount").isNumber())
-                .andExpect(jsonPath("$.data.nextQuestionId").isNumber());
+                .andExpect(jsonPath("$.data.nextQuestionId").value(followUpQuestionId));
+
+        submitAnswer(interviewId, followUpQuestionId, ownerToken, "follow-up answer")
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.code").value("SUCCESS"));
+        assertThat(getProgress(interviewId, ownerToken).path("nextQuestionId").asLong()).isEqualTo(secondQuestionId);
 
         JsonNode currentProgress = getProgress(interviewId, ownerToken);
         while (!currentProgress.path("allAnswered").asBoolean()) {
@@ -218,6 +309,18 @@ class InterviewFlowIntegrationTest {
                     assertThat(interview.getCompletedAt()).isNotNull();
                 });
 
+        mockMvc.perform(get("/api/v1/interviews/{interviewId}", interviewId)
+                        .header("Authorization", bearer(ownerToken)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.status").value("COMPLETED"))
+                .andExpect(jsonPath("$.data.startedAt").exists())
+                .andExpect(jsonPath("$.data.completedAt").exists());
+
+        mockMvc.perform(post("/api/v1/interviews/{interviewId}/start", interviewId)
+                        .header("Authorization", bearer(ownerToken)))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.code").value("INTERVIEW_ALREADY_COMPLETED"));
+
         mockMvc.perform(post("/api/v1/interviews/{interviewId}/feedback", interviewId)
                         .header("Authorization", bearer(ownerToken)))
                 .andExpect(status().isCreated())
@@ -229,12 +332,35 @@ class InterviewFlowIntegrationTest {
                 .andExpect(status().isConflict())
                 .andExpect(jsonPath("$.code").value("FEEDBACK_ALREADY_EXISTS"));
 
+        QuestionEvaluation evaluation = questionEvaluationRepository.save(QuestionEvaluation.builder()
+                .answer(interviewAnswerRepository.findAllByInterviewIdWithQuestion(interviewId).get(0))
+                .score(88)
+                .strengths("Clear structure")
+                .weaknesses("More specific examples needed")
+                .improvementSuggestion("Add measurable outcomes")
+                .reasoning("The answer covered the key concepts.")
+                .aiModel("test-model")
+                .build());
+
         mockMvc.perform(get("/api/v1/interviews/{interviewId}/result", interviewId)
                         .header("Authorization", bearer(ownerToken)))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.code").value("SUCCESS"))
                 .andExpect(jsonPath("$.data.status").value("COMPLETED"))
+                .andExpect(jsonPath("$.data.completedAt").exists())
+                .andExpect(jsonPath("$.data.companyName").value("Example Corp"))
+                .andExpect(jsonPath("$.data.positionName").value("Backend Developer"))
                 .andExpect(jsonPath("$.data.questionAnswers.length()").value(6))
+                .andExpect(jsonPath("$.data.questionAnswers[0].questionId").isNumber())
+                .andExpect(jsonPath("$.data.questionAnswers[0].parentQuestionId").doesNotExist())
+                .andExpect(jsonPath("$.data.questionAnswers[0].category").exists())
+                .andExpect(jsonPath("$.data.questionAnswers[0].difficulty").exists())
+                .andExpect(jsonPath("$.data.questionAnswers[0].followUp").value(false))
+                .andExpect(jsonPath("$.data.questionAnswers[0].evaluation.evaluationId").value(evaluation.getId()))
+                .andExpect(jsonPath("$.data.questionAnswers[0].evaluation.score").value(88))
+                .andExpect(jsonPath("$.data.questionAnswers[1].parentQuestionId").value(firstQuestionId))
+                .andExpect(jsonPath("$.data.questionAnswers[1].followUp").value(true))
+                .andExpect(jsonPath("$.data.questionAnswers[1].evaluation").doesNotExist())
                 .andExpect(jsonPath("$.data.feedback.overallScore").value(90));
         assertThat(interviewAnswerRepository.countByInterviewQuestionInterviewId(interviewId)).isEqualTo(6);
     }
