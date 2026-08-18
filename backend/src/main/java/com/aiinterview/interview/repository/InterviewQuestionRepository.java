@@ -31,6 +31,7 @@ public interface InterviewQuestionRepository extends JpaRepository<InterviewQues
             from InterviewQuestion question
             join fetch question.interview interview
             join fetch interview.user
+            left join fetch question.parentQuestion
             where question.id = :questionId
             """)
     Optional<InterviewQuestion> findWithInterviewAndUserById(Long questionId);

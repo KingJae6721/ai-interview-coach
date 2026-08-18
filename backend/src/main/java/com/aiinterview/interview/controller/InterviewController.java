@@ -9,6 +9,8 @@ import com.aiinterview.feedback.service.FeedbackService;
 import com.aiinterview.interview.dto.InterviewCreateResponse;
 import com.aiinterview.interview.dto.InterviewCreateRequest;
 import com.aiinterview.interview.dto.InterviewCompleteResponse;
+import com.aiinterview.interview.dto.InterviewStartResponse;
+import com.aiinterview.interview.dto.InterviewStateResponse;
 import com.aiinterview.interview.dto.InterviewAnswerCreateRequest;
 import com.aiinterview.interview.dto.InterviewAnswerCreateResponse;
 import com.aiinterview.interview.dto.InterviewQuestionResponse;
@@ -68,6 +70,26 @@ public class InterviewController {
 
         List<InterviewQuestionResponse> response = interviewService.getInterviewQuestions(
                 userDetails.getId(), interviewId);
+
+        return ResponseEntity.ok(ApiResponse.success(response));
+    }
+
+    @PostMapping("/{interviewId}/start")
+    public ResponseEntity<ApiResponse<InterviewStartResponse>> startInterview(
+            @AuthenticationPrincipal CustomUserDetails userDetails,
+            @PathVariable Long interviewId) {
+
+        InterviewStartResponse response = interviewService.startInterview(userDetails.getId(), interviewId);
+
+        return ResponseEntity.ok(ApiResponse.success(ResultCode.SUCCESS, response));
+    }
+
+    @GetMapping("/{interviewId}")
+    public ResponseEntity<ApiResponse<InterviewStateResponse>> getInterviewState(
+            @AuthenticationPrincipal CustomUserDetails userDetails,
+            @PathVariable Long interviewId) {
+
+        InterviewStateResponse response = interviewService.getInterviewState(userDetails.getId(), interviewId);
 
         return ResponseEntity.ok(ApiResponse.success(response));
     }

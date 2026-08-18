@@ -5,6 +5,8 @@ import com.aiinterview.interview.dto.InterviewAnswerCreateResponse;
 import com.aiinterview.interview.dto.InterviewCreateResponse;
 import com.aiinterview.interview.dto.InterviewCreateRequest;
 import com.aiinterview.interview.dto.InterviewCompleteResponse;
+import com.aiinterview.interview.dto.InterviewStartResponse;
+import com.aiinterview.interview.dto.InterviewStateResponse;
 import com.aiinterview.interview.dto.InterviewQuestionResponse;
 import com.aiinterview.interview.dto.InterviewProgressResponse;
 import com.aiinterview.interview.dto.InterviewHistoryResponse;
@@ -21,6 +23,10 @@ public interface InterviewService {
     Page<InterviewHistoryResponse> getInterviewHistory(Long userId, Pageable pageable);
 
     List<InterviewQuestionResponse> getInterviewQuestions(Long userId, Long interviewId);
+
+    InterviewStartResponse startInterview(Long userId, Long interviewId);
+
+    InterviewStateResponse getInterviewState(Long userId, Long interviewId);
 
     InterviewProgressResponse getInterviewProgress(Long userId, Long interviewId);
 

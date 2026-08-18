@@ -1,6 +1,6 @@
 package com.aiinterview.interview.service;
 
-import com.aiinterview.ai.service.OpenAiService;
+import com.aiinterview.ai.service.AiService;
 import com.aiinterview.ai.dto.InterviewQuestionDistribution;
 import com.aiinterview.ai.dto.InterviewFollowUpQuestionResponse;
 import com.aiinterview.ai.prompt.InterviewQuestionDistributionPolicy;
@@ -13,6 +13,8 @@ import com.aiinterview.interview.dto.InterviewCreateResponse;
 import com.aiinterview.interview.dto.InterviewCreateRequest;
 import com.aiinterview.interview.dto.InterviewCompleteResponse;
 import com.aiinterview.interview.dto.InterviewCompleteUnavailableResponse;
+import com.aiinterview.interview.dto.InterviewStartResponse;
+import com.aiinterview.interview.dto.InterviewStateResponse;
 import com.aiinterview.interview.dto.InterviewQuestionResponse;
 import com.aiinterview.interview.dto.InterviewProgressQuestionResponse;
 import com.aiinterview.interview.dto.InterviewProgressResponse;
@@ -22,7 +24,6 @@ import com.aiinterview.feedback.repository.FeedbackRepository;
 import com.aiinterview.interview.entity.Interview;
 import com.aiinterview.interview.entity.InterviewAnswer;
 import com.aiinterview.interview.entity.InterviewQuestion;
-import com.aiinterview.interview.entity.InterviewQuestionType;
 import com.aiinterview.interview.entity.InterviewStatus;
 import com.aiinterview.interview.repository.InterviewAnswerRepository;
 import com.aiinterview.interview.repository.InterviewQuestionRepository;
@@ -40,10 +41,9 @@ import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Map;
-import java.time.LocalDateTime;
-import java.util.stream.IntStream;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
@@ -57,47 +57,32 @@ public class InterviewServiceImpl implements InterviewService {
     private final FeedbackRepository feedbackRepository;
     private final UserRepository userRepository;
     private final JobPositionRepository jobPositionRepository;
-    private final OpenAiService openAiService;
+    private final AiService aiService;
+    private final InterviewCreationPersistenceService interviewCreationPersistenceService;
+    private final InterviewFollowUpQuestionPersistenceService interviewFollowUpQuestionPersistenceService;
+    private final InterviewQuestionExecutionOrderResolver interviewQuestionExecutionOrderResolver;
 
     @Override
-    @Transactional
     public InterviewCreateResponse createInterview(Long userId, InterviewCreateRequest request) {
-        User user = userRepository.findById(userId)
-                .orElseThrow(() -> new BusinessException(ErrorCode.USER_NOT_FOUND));
+        if (!userRepository.existsById(userId)) {
+            throw new BusinessException(ErrorCode.USER_NOT_FOUND);
+        }
 
         JobPosition jobPosition = jobPositionRepository.findWithCompanyById(request.getJobPositionId())
                 .orElseThrow(() -> new BusinessException(ErrorCode.JOB_POSITION_NOT_FOUND));
 
-        Interview interview = interviewRepository.save(Interview.builder()
-                .user(user)
+        Interview interview = Interview.builder()
                 .jobPosition(jobPosition)
                 .title(request.getTitle())
                 .status(InterviewStatus.READY)
-                .build());
+                .build();
 
         List<InterviewQuestionDistribution> distributions = InterviewQuestionDistributionPolicy.create(
                 interview, InterviewQuestionDistributionPolicy.DEFAULT_QUESTION_COUNT);
-        List<String> generatedQuestions = openAiService.generateInterviewQuestions(
+        List<String> generatedQuestions = aiService.generateInterviewQuestions(
                 InterviewQuestionPromptBuilder.buildUserPrompt(interview, distributions));
-        List<InterviewQuestion> interviewQuestions = IntStream.range(0, generatedQuestions.size())
-                .mapToObj(index -> InterviewQuestion.builder()
-                        .interview(interview)
-                        .questionOrder(index + 1)
-                        .content(generatedQuestions.get(index))
-                        .category(distributions.get(index).category())
-                        .difficulty(distributions.get(index).difficulty())
-                        .type(InterviewQuestionType.NORMAL)
-                        .isAiGenerated(true)
-                        .build())
-                .toList();
-        interviewQuestionRepository.saveAll(interviewQuestions);
-
-        return InterviewCreateResponse.builder()
-                .interviewId(interview.getId())
-                .title(interview.getTitle())
-                .status(interview.getStatus())
-                .questionCount(interviewQuestions.size())
-                .build();
+        return interviewCreationPersistenceService.save(userId, jobPosition.getId(), request.getTitle(),
+                generatedQuestions, distributions);
     }
 
     @Override
@@ -119,23 +104,72 @@ public class InterviewServiceImpl implements InterviewService {
     }
 
     @Override
-    @Transactional
+    @Transactional(readOnly = true)
     public List<InterviewQuestionResponse> getInterviewQuestions(Long userId, Long interviewId) {
-        Interview interview = interviewRepository.findById(interviewId)
+        Interview interview = interviewRepository.findWithUserById(interviewId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.INTERVIEW_NOT_FOUND));
 
         if (!interview.getUser().getId().equals(userId)) {
             throw new BusinessException(ErrorCode.ACCESS_DENIED);
         }
 
-        interview.start();
-
-        return interviewQuestionRepository.findByInterviewIdOrderByQuestionOrderAsc(interviewId).stream()
+        return interviewQuestionExecutionOrderResolver.resolve(interviewQuestionRepository
+                .findAllByInterviewIdWithParentOrderByQuestionOrderAsc(interviewId)).stream()
                 .map(interviewQuestion -> InterviewQuestionResponse.builder()
                         .questionOrder(interviewQuestion.getQuestionOrder())
                         .content(interviewQuestion.getContent())
                         .build())
                 .toList();
+    }
+
+    @Override
+    @Transactional
+    public InterviewStartResponse startInterview(Long userId, Long interviewId) {
+        Interview interview = interviewRepository.findWithUserById(interviewId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.INTERVIEW_NOT_FOUND));
+
+        if (!interview.getUser().getId().equals(userId)) {
+            throw new BusinessException(ErrorCode.ACCESS_DENIED);
+        }
+        if (interview.getStatus() == InterviewStatus.IN_PROGRESS) {
+            throw new BusinessException(ErrorCode.INTERVIEW_ALREADY_STARTED);
+        }
+        if (interview.getStatus() == InterviewStatus.COMPLETED) {
+            throw new BusinessException(ErrorCode.INTERVIEW_ALREADY_COMPLETED);
+        }
+
+        interview.start();
+
+        return InterviewStartResponse.builder()
+                .interviewId(interview.getId())
+                .status(interview.getStatus())
+                .startedAt(interview.getStartedAt())
+                .build();
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public InterviewStateResponse getInterviewState(Long userId, Long interviewId) {
+        Interview interview = interviewRepository.findWithUserAndJobPositionAndCompanyById(interviewId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.INTERVIEW_NOT_FOUND));
+
+        if (!interview.getUser().getId().equals(userId)) {
+            throw new BusinessException(ErrorCode.ACCESS_DENIED);
+        }
+
+        JobPosition jobPosition = interview.getJobPosition();
+
+        return InterviewStateResponse.builder()
+                .interviewId(interview.getId())
+                .title(interview.getTitle())
+                .status(interview.getStatus())
+                .createdAt(interview.getCreatedAt())
+                .startedAt(interview.getStartedAt())
+                .completedAt(interview.getCompletedAt())
+                .jobPositionId(jobPosition == null ? null : jobPosition.getId())
+                .positionName(jobPosition == null ? null : jobPosition.getName())
+                .companyName(jobPosition == null ? null : jobPosition.getCompany().getName())
+                .build();
     }
 
     @Override
@@ -147,12 +181,10 @@ public class InterviewServiceImpl implements InterviewService {
         if (!interview.getUser().getId().equals(userId)) {
             throw new BusinessException(ErrorCode.ACCESS_DENIED);
         }
-        if (interview.getStatus() != InterviewStatus.IN_PROGRESS) {
-            throw new BusinessException(ErrorCode.INTERVIEW_NOT_IN_PROGRESS);
-        }
+        validateProgressStatus(interview);
 
-        List<InterviewQuestion> questions = interviewQuestionRepository
-                .findAllByInterviewIdWithParentOrderByQuestionOrderAsc(interviewId);
+        List<InterviewQuestion> questions = interviewQuestionExecutionOrderResolver.resolve(interviewQuestionRepository
+                .findAllByInterviewIdWithParentOrderByQuestionOrderAsc(interviewId));
         Map<Long, InterviewAnswer> answersByQuestionId = interviewAnswerRepository
                 .findAllByInterviewIdWithQuestion(interviewId).stream()
                 .collect(Collectors.toMap(answer -> answer.getInterviewQuestion().getId(), Function.identity()));
@@ -161,7 +193,7 @@ public class InterviewServiceImpl implements InterviewService {
                 .map(question -> toProgressQuestionResponse(question, answersByQuestionId.get(question.getId())))
                 .toList();
         Long nextQuestionId = findNextQuestionId(questions, answersByQuestionId);
-        boolean allAnswered = !questions.isEmpty() && questions.size() == answersByQuestionId.size();
+        boolean allAnswered = areAllQuestionsAnswered(questions, answersByQuestionId);
 
         return InterviewProgressResponse.builder()
                 .interviewId(interview.getId())
@@ -187,7 +219,8 @@ public class InterviewServiceImpl implements InterviewService {
         }
 
         Long interviewId = interviewQuestion.getInterview().getId();
-        List<InterviewQuestion> questions = interviewQuestionRepository.findByInterviewIdOrderByQuestionOrderAsc(interviewId);
+        List<InterviewQuestion> questions = interviewQuestionExecutionOrderResolver.resolve(interviewQuestionRepository
+                .findAllByInterviewIdWithParentOrderByQuestionOrderAsc(interviewId));
         Map<Long, InterviewAnswer> answersByQuestionId = findAnswersByQuestionId(interviewId);
 
         if (answersByQuestionId.containsKey(questionId)) {
@@ -212,13 +245,18 @@ public class InterviewServiceImpl implements InterviewService {
     }
 
     @Override
-    @Transactional
     public InterviewFollowUpQuestionResponse generateFollowUpQuestion(Long userId, Long questionId) {
         InterviewQuestion parentQuestion = interviewQuestionRepository.findWithInterviewAndUserById(questionId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.INTERVIEW_QUESTION_NOT_FOUND));
 
         if (!parentQuestion.getInterview().getUser().getId().equals(userId)) {
             throw new BusinessException(ErrorCode.ACCESS_DENIED);
+        }
+        if (parentQuestion.getParentQuestion() != null) {
+            return InterviewFollowUpQuestionResponse.builder()
+                    .parentQuestionId(parentQuestion.getId())
+                    .created(false)
+                    .build();
         }
 
         return interviewQuestionRepository.findByParentQuestionId(questionId)
@@ -239,10 +277,11 @@ public class InterviewServiceImpl implements InterviewService {
             throw new BusinessException(ErrorCode.INTERVIEW_NOT_IN_PROGRESS);
         }
 
-        List<InterviewQuestion> questions = interviewQuestionRepository.findByInterviewIdOrderByQuestionOrderAsc(interviewId);
+        List<InterviewQuestion> questions = interviewQuestionExecutionOrderResolver.resolve(interviewQuestionRepository
+                .findAllByInterviewIdWithParentOrderByQuestionOrderAsc(interviewId));
         Map<Long, InterviewAnswer> answersByQuestionId = findAnswersByQuestionId(interviewId);
         Long nextQuestionId = findNextQuestionId(questions, answersByQuestionId);
-        boolean allAnswered = !questions.isEmpty() && questions.size() == answersByQuestionId.size();
+        boolean allAnswered = areAllQuestionsAnswered(questions, answersByQuestionId);
         if (!allAnswered) {
             throw new BusinessException(ErrorCode.INTERVIEW_NOT_COMPLETABLE,
                     InterviewCompleteUnavailableResponse.builder()
@@ -299,6 +338,21 @@ public class InterviewServiceImpl implements InterviewService {
                 .orElse(null);
     }
 
+    private void validateProgressStatus(Interview interview) {
+        if (interview.getStatus() == InterviewStatus.READY) {
+            throw new BusinessException(ErrorCode.INTERVIEW_NOT_STARTED);
+        }
+        if (interview.getStatus() == InterviewStatus.COMPLETED) {
+            throw new BusinessException(ErrorCode.INTERVIEW_ALREADY_COMPLETED);
+        }
+    }
+
+    private boolean areAllQuestionsAnswered(List<InterviewQuestion> questions,
+                                            Map<Long, InterviewAnswer> answersByQuestionId) {
+        return !questions.isEmpty()
+                && questions.stream().allMatch(question -> answersByQuestionId.containsKey(question.getId()));
+    }
+
     private InterviewProgressQuestionResponse toProgressQuestionResponse(InterviewQuestion question,
                                                                           InterviewAnswer answer) {
         return InterviewProgressQuestionResponse.builder()
@@ -317,18 +371,18 @@ public class InterviewServiceImpl implements InterviewService {
         InterviewAnswer answer = interviewAnswerRepository.findByInterviewQuestionId(parentQuestion.getId())
                 .orElseThrow(() -> new BusinessException(ErrorCode.INTERVIEW_ANSWER_NOT_FOUND));
 
-        return openAiService.generateFollowUpQuestion(answer.getAnswerContent())
+        return aiService.generateFollowUpQuestion(answer.getAnswerContent())
                 .map(content -> {
-                    InterviewQuestion followUpQuestion = interviewQuestionRepository.save(InterviewQuestion.builder()
-                            .interview(parentQuestion.getInterview())
-                            .parentQuestion(parentQuestion)
-                            .questionOrder(interviewQuestionRepository.findMaxQuestionOrderByInterviewId(
-                                    parentQuestion.getInterview().getId()) + 1)
-                            .content(content)
-                            .type(InterviewQuestionType.FOLLOW_UP)
-                            .isAiGenerated(true)
-                            .build());
-                    return toFollowUpResponse(parentQuestion, followUpQuestion, true);
+                    try {
+                        InterviewQuestion followUpQuestion = interviewFollowUpQuestionPersistenceService
+                                .save(parentQuestion.getId(), content);
+                        return toFollowUpResponse(parentQuestion, followUpQuestion, true);
+                    } catch (DataIntegrityViolationException e) {
+                        InterviewQuestion followUpQuestion = interviewQuestionRepository
+                                .findByParentQuestionId(parentQuestion.getId())
+                                .orElseThrow(() -> e);
+                        return toFollowUpResponse(parentQuestion, followUpQuestion, false);
+                    }
                 })
                 .orElseGet(() -> InterviewFollowUpQuestionResponse.builder()
                         .parentQuestionId(parentQuestion.getId())

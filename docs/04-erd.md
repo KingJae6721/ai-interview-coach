@@ -193,7 +193,7 @@ Table questions {
 
   type QuestionType
 
-  sequence int
+  sequence int // Base question sequence. Follow-up execution order is derived from parent_question_id.
 
   reason text
 

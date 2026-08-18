@@ -49,6 +49,9 @@ public class Interview extends BaseEntity {
     @Column(name = "completed_at")
     private LocalDateTime completedAt;
 
+    @Column(name = "started_at")
+    private LocalDateTime startedAt;
+
     @Builder
     private Interview(User user, JobPosition jobPosition, String title, InterviewStatus status) {
         this.user = user;
@@ -58,9 +61,8 @@ public class Interview extends BaseEntity {
     }
 
     public void start() {
-        if (status == InterviewStatus.READY) {
-            this.status = InterviewStatus.IN_PROGRESS;
-        }
+        this.status = InterviewStatus.IN_PROGRESS;
+        this.startedAt = LocalDateTime.now();
     }
 
     public void complete() {
