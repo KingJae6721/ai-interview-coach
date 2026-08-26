@@ -2,6 +2,8 @@ import Link from "next/link";
 
 import { AuthStatus } from "@/features/auth/components/auth-status";
 import { ProtectedRoute } from "@/features/auth/components/route-guards";
+import { DashboardInsights } from "@/features/dashboard/components/dashboard-insights";
+import { DashboardSummary } from "@/features/dashboard/components/dashboard-summary";
 
 export default function DashboardPage() {
   return (
@@ -23,18 +25,10 @@ export default function DashboardPage() {
             <AuthStatus />
           </header>
 
-          <section className="mt-6 rounded-2xl border border-dashed border-zinc-300 bg-white p-10 text-center">
-            <h2 className="text-lg font-medium">면접 분석 대시보드</h2>
-            <p className="mt-2 text-sm text-zinc-500">
-              다음 Sprint에서 면접 통계와 최근 기록을 연결합니다.
-            </p>
-            <Link
-              href="/interviews/new"
-              className="mt-6 inline-block rounded-lg bg-zinc-900 px-5 py-2.5 text-sm font-medium text-white hover:bg-zinc-700"
-            >
-              새 면접 만들기
-            </Link>
-          </section>
+          <DashboardSummary />
+          <div className="mt-6 space-y-6">
+            <DashboardInsights />
+          </div>
         </div>
       </main>
     </ProtectedRoute>
