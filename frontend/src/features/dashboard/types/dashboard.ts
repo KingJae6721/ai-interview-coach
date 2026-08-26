@@ -10,9 +10,12 @@ export interface DashboardRecentInterviewResponse {
   status: InterviewStatus;
   createdAt: string;
   completedAt: string | null;
+  cancelledAt: string | null;
   companyName: string | null;
   positionName: string | null;
   overallScore: number | null;
+  feedbackExists: boolean;
+  partial: boolean;
 }
 
 export interface DashboardSummaryResponse {

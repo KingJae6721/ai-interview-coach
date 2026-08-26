@@ -42,7 +42,31 @@ function getInterviewHref(interview: DashboardRecentInterviewResponse) {
     return `/interviews/${interview.interviewId}`;
   }
 
+  if (
+    interview.status === "CANCELLED" &&
+    interview.feedbackExists &&
+    interview.partial
+  ) {
+    return `/interviews/${interview.interviewId}/result`;
+  }
+
   return null;
+}
+
+function getCtaLabel(interview: DashboardRecentInterviewResponse): string {
+  if (interview.status === "CANCELLED") {
+    return interview.feedbackExists && interview.partial
+      ? "부분 결과 보기"
+      : "중도 종료됨";
+  }
+
+  if (interview.status === "COMPLETED") {
+    return interview.overallScore === null
+      ? "결과 보기"
+      : `${interview.overallScore}점 · 결과 보기`;
+  }
+
+  return interview.status === "IN_PROGRESS" ? "면접 계속하기" : "면접 시작하기";
 }
 
 function RecentInterviewRow({
@@ -61,6 +85,11 @@ function RecentInterviewRow({
           <span className="rounded-full bg-zinc-100 px-2.5 py-1 text-xs font-medium text-zinc-600">
             {STATUS_LABELS[interview.status]}
           </span>
+          {interview.partial && (
+            <span className="rounded-full bg-violet-100 px-2.5 py-1 text-xs font-medium text-violet-700">
+              부분 피드백
+            </span>
+          )}
         </div>
         <p className="mt-1 text-sm text-zinc-500">
           {[interview.companyName, interview.positionName]
@@ -71,19 +100,13 @@ function RecentInterviewRow({
           {interview.status === "COMPLETED"
             ? `완료 ${formatDate(interview.completedAt)}`
             : interview.status === "CANCELLED"
-              ? "중도 종료된 면접"
+              ? `중도 종료 ${formatDate(interview.cancelledAt)}`
               : `생성 ${formatDate(interview.createdAt)}`}
         </p>
       </div>
       <div className="flex items-center justify-between gap-4 sm:justify-end">
         <span className="text-sm font-semibold text-zinc-900">
-          {interview.overallScore !== null
-            ? `${interview.overallScore}점`
-            : interview.status === "CANCELLED"
-              ? "면접 이력에서 확인"
-              : interview.status === "COMPLETED"
-                ? "결과 보기"
-                : "계속하기"}
+          {getCtaLabel(interview)}
         </span>
         {href && (
           <span aria-hidden="true" className="text-zinc-400">

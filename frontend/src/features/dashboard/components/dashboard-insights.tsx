@@ -150,8 +150,14 @@ function StatisticsList({
                 />
               </div>
               <p className="mt-2 text-xs text-zinc-500">
-                면접 {item.interviewCount}건 · 평가 {item.evaluationCount}건
+                면접 {item.interviewCount}건 · 질문 {item.questionCount}개 ·
+                평가 {item.evaluationCount}개
               </p>
+              {item.evaluationCount === 0 && (
+                <p className="mt-1 text-xs font-medium text-amber-700">
+                  평가 데이터가 없어 약점 판단에서 제외됩니다.
+                </p>
+              )}
             </li>
           );
         })}
