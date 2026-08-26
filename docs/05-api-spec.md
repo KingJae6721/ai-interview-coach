@@ -374,17 +374,19 @@ URL fetch failures return `JOB_POSTING_FETCH_FAILED`; inaccessible or empty post
 {
   "jobPositionId": 1,
   "jobPostingId": 10,
+  "resumeId": 5,
   "title": "Backend Interview"
 }
 ```
 
-`jobPostingId` is optional. When omitted, the existing JobPosition-only question generation flow is used. When
-provided, the posting must belong to `jobPositionId` and have a saved analysis.
+`jobPostingId` and `resumeId` are optional. Supported combinations are JobPosition only, JobPosition + JobPosting,
+JobPosition + Resume, and JobPosition + JobPosting + Resume. A posting must belong to `jobPositionId` and have a
+saved analysis. A resume must belong to the authenticated user and have a saved analysis.
 
 ### Process
 
 ```
-Company + JobPosition + optional JobPostingAnalysis snapshot
+Company + JobPosition + optional JobPostingAnalysis + optional ResumeAnalysis snapshots
 
 Question distribution policy (difficulty and category)
 
@@ -404,6 +406,10 @@ Question 생성
 
 Question 저장
 ```
+
+Question generation uses saved analysis snapshots only. Interview creation does not refetch a posting URL, reanalyze
+a posting, parse a PDF, or reanalyze a resume. When both optional contexts are provided, the prompt balances role
+fundamentals with posting requirements, documented resume experience, and cross-context questions.
 
 ### Response
 
@@ -440,6 +446,14 @@ Only the owner can start an interview in `READY`. Questions are already generate
 | 404 | `JOB_POSTING_NOT_FOUND` | The requested JobPosting does not exist. |
 | 409 | `JOB_POSTING_NOT_ANALYZED` | The JobPosting does not have a saved analysis. |
 | 409 | `JOB_POSTING_POSITION_MISMATCH` | The JobPosting belongs to another JobPosition. |
+
+### Resume validation errors
+
+| Status | Code | Description |
+|---|---|---|
+| 404 | `RESUME_NOT_FOUND` | The requested Resume does not exist. |
+| 403 | `RESUME_ACCESS_DENIED` | The Resume belongs to another user. |
+| 409 | `RESUME_NOT_ANALYZED` | The Resume does not have a saved analysis. |
 
 ---
 

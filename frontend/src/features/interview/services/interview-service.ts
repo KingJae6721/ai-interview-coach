@@ -13,12 +13,39 @@ import type {
   InterviewResultResponse,
   InterviewStartResponse,
   InterviewStateResponse,
+  JobPostingAnalyzeRequest,
+  JobPostingAnalyzeResponse,
   JobPositionResponse,
   PageResponse,
+  ResumeAnalyzeResponse,
+  ResumeSummaryResponse,
 } from "@/features/interview/types/interview";
 
 export function getJobPositions(): Promise<JobPositionResponse[]> {
   return apiFetch<JobPositionResponse[]>("/api/v1/job-positions");
+}
+
+export function analyzeJobPosting(
+  request: JobPostingAnalyzeRequest,
+): Promise<JobPostingAnalyzeResponse> {
+  return apiFetch<JobPostingAnalyzeResponse>("/api/v1/job-postings/analyze", {
+    method: "POST",
+    body: JSON.stringify(request),
+  });
+}
+
+export function getResumes(): Promise<ResumeSummaryResponse[]> {
+  return apiFetch<ResumeSummaryResponse[]>("/api/v1/resumes");
+}
+
+export function analyzeResume(file: File): Promise<ResumeAnalyzeResponse> {
+  const formData = new FormData();
+  formData.append("file", file);
+
+  return apiFetch<ResumeAnalyzeResponse>("/api/v1/resumes/analyze", {
+    method: "POST",
+    body: formData,
+  });
 }
 
 export function createInterview(

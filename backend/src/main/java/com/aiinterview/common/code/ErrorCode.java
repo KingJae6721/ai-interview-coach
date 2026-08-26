@@ -43,6 +43,9 @@ public enum ErrorCode {
     RESUME_FILE_TOO_LARGE(HttpStatus.PAYLOAD_TOO_LARGE, "Resume file exceeds the allowed size."),
     RESUME_TEXT_EXTRACTION_FAILED(HttpStatus.UNPROCESSABLE_CONTENT, "Resume text extraction failed."),
     RESUME_CONTENT_NOT_FOUND(HttpStatus.UNPROCESSABLE_CONTENT, "No readable text was found in the resume."),
+    RESUME_NOT_FOUND(HttpStatus.NOT_FOUND, "Resume not found."),
+    RESUME_ACCESS_DENIED(HttpStatus.FORBIDDEN, "You do not have access to this resume."),
+    RESUME_NOT_ANALYZED(HttpStatus.CONFLICT, "Resume analysis not found."),
 
     // Interview
     INTERVIEW_NOT_FOUND(HttpStatus.NOT_FOUND, "면접을 찾을 수 없습니다."),

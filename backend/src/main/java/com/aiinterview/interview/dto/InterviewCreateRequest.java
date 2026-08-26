@@ -15,6 +15,8 @@ public class InterviewCreateRequest {
 
     private Long jobPostingId;
 
+    private Long resumeId;
+
     @NotBlank
     @Size(max = 100)
     private String title;

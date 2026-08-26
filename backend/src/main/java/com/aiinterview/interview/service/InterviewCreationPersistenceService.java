@@ -14,6 +14,9 @@ import com.aiinterview.jobposition.entity.JobPosition;
 import com.aiinterview.jobposition.repository.JobPositionRepository;
 import com.aiinterview.jobposting.entity.JobPosting;
 import com.aiinterview.jobposting.repository.JobPostingRepository;
+import com.aiinterview.resume.entity.Resume;
+import com.aiinterview.resume.repository.ResumeAnalysisRepository;
+import com.aiinterview.resume.repository.ResumeRepository;
 import com.aiinterview.user.entity.User;
 import com.aiinterview.user.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
@@ -30,11 +33,13 @@ class InterviewCreationPersistenceService {
     private final UserRepository userRepository;
     private final JobPositionRepository jobPositionRepository;
     private final JobPostingRepository jobPostingRepository;
+    private final ResumeRepository resumeRepository;
+    private final ResumeAnalysisRepository resumeAnalysisRepository;
     private final InterviewRepository interviewRepository;
     private final InterviewQuestionRepository interviewQuestionRepository;
 
     @Transactional
-    public InterviewCreateResponse save(Long userId, Long jobPositionId, Long jobPostingId, String title,
+    public InterviewCreateResponse save(Long userId, Long jobPositionId, Long jobPostingId, Long resumeId, String title,
                                         List<String> generatedQuestions,
                                         List<InterviewQuestionDistribution> distributions) {
         User user = userRepository.findById(userId)
@@ -42,11 +47,13 @@ class InterviewCreationPersistenceService {
         JobPosition jobPosition = jobPositionRepository.findById(jobPositionId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.JOB_POSITION_NOT_FOUND));
         JobPosting jobPosting = findJobPosting(jobPostingId, jobPositionId);
+        Resume resume = findResume(resumeId, userId);
 
         Interview interview = interviewRepository.save(Interview.builder()
                 .user(user)
                 .jobPosition(jobPosition)
                 .jobPosting(jobPosting)
+                .resume(resume)
                 .title(title)
                 .status(InterviewStatus.READY)
                 .build());
@@ -82,5 +89,20 @@ class InterviewCreationPersistenceService {
             throw new BusinessException(ErrorCode.JOB_POSTING_POSITION_MISMATCH);
         }
         return jobPosting;
+    }
+
+    private Resume findResume(Long resumeId, Long userId) {
+        if (resumeId == null) {
+            return null;
+        }
+        Resume resume = resumeRepository.findWithUserById(resumeId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.RESUME_NOT_FOUND));
+        if (!resume.getUser().getId().equals(userId)) {
+            throw new BusinessException(ErrorCode.RESUME_ACCESS_DENIED);
+        }
+        if (!resumeAnalysisRepository.existsByResumeId(resumeId)) {
+            throw new BusinessException(ErrorCode.RESUME_NOT_ANALYZED);
+        }
+        return resume;
     }
 }

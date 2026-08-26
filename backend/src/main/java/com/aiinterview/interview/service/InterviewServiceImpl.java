@@ -35,6 +35,10 @@ import com.aiinterview.jobposting.entity.JobPosting;
 import com.aiinterview.jobposting.entity.JobPostingAnalysis;
 import com.aiinterview.jobposting.repository.JobPostingAnalysisRepository;
 import com.aiinterview.jobposting.repository.JobPostingRepository;
+import com.aiinterview.resume.entity.Resume;
+import com.aiinterview.resume.entity.ResumeAnalysis;
+import com.aiinterview.resume.repository.ResumeAnalysisRepository;
+import com.aiinterview.resume.repository.ResumeRepository;
 import com.aiinterview.user.entity.User;
 import com.aiinterview.user.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
@@ -64,6 +68,8 @@ public class InterviewServiceImpl implements InterviewService {
     private final JobPositionRepository jobPositionRepository;
     private final JobPostingRepository jobPostingRepository;
     private final JobPostingAnalysisRepository jobPostingAnalysisRepository;
+    private final ResumeRepository resumeRepository;
+    private final ResumeAnalysisRepository resumeAnalysisRepository;
     private final AiService aiService;
     private final InterviewCreationPersistenceService interviewCreationPersistenceService;
     private final InterviewFollowUpQuestionPersistenceService interviewFollowUpQuestionPersistenceService;
@@ -79,11 +85,14 @@ public class InterviewServiceImpl implements InterviewService {
                 .orElseThrow(() -> new BusinessException(ErrorCode.JOB_POSITION_NOT_FOUND));
         JobPostingAnalysis jobPostingAnalysis = resolveJobPostingAnalysis(
                 request.getJobPostingId(), jobPosition.getId());
+        ResumeAnalysis resumeAnalysis = resolveResumeAnalysis(request.getResumeId(), userId);
         JobPosting jobPosting = jobPostingAnalysis == null ? null : jobPostingAnalysis.getJobPosting();
+        Resume resume = resumeAnalysis == null ? null : resumeAnalysis.getResume();
 
         Interview interview = Interview.builder()
                 .jobPosition(jobPosition)
                 .jobPosting(jobPosting)
+                .resume(resume)
                 .title(request.getTitle())
                 .status(InterviewStatus.READY)
                 .build();
@@ -91,9 +100,10 @@ public class InterviewServiceImpl implements InterviewService {
         List<InterviewQuestionDistribution> distributions = InterviewQuestionDistributionPolicy.create(
                 interview, jobPostingAnalysis, InterviewQuestionDistributionPolicy.DEFAULT_QUESTION_COUNT);
         List<String> generatedQuestions = aiService.generateInterviewQuestions(
-                InterviewQuestionPromptBuilder.buildUserPrompt(interview, jobPostingAnalysis, distributions));
+                InterviewQuestionPromptBuilder.buildUserPrompt(
+                        interview, jobPostingAnalysis, resumeAnalysis, distributions));
         return interviewCreationPersistenceService.save(userId, jobPosition.getId(), request.getJobPostingId(),
-                request.getTitle(), generatedQuestions, distributions);
+                request.getResumeId(), request.getTitle(), generatedQuestions, distributions);
     }
 
     private JobPostingAnalysis resolveJobPostingAnalysis(Long jobPostingId, Long jobPositionId) {
@@ -114,6 +124,30 @@ public class InterviewServiceImpl implements InterviewService {
             throw new BusinessException(ErrorCode.JOB_POSTING_POSITION_MISMATCH);
         }
         return analysis;
+    }
+
+    private ResumeAnalysis resolveResumeAnalysis(Long resumeId, Long userId) {
+        if (resumeId == null) {
+            return null;
+        }
+
+        return resumeAnalysisRepository.findWithResumeAndUserByResumeId(resumeId)
+                .map(analysis -> {
+                    validateResumeOwner(analysis.getResume(), userId);
+                    return analysis;
+                })
+                .orElseGet(() -> {
+                    Resume resume = resumeRepository.findWithUserById(resumeId)
+                            .orElseThrow(() -> new BusinessException(ErrorCode.RESUME_NOT_FOUND));
+                    validateResumeOwner(resume, userId);
+                    throw new BusinessException(ErrorCode.RESUME_NOT_ANALYZED);
+                });
+    }
+
+    private void validateResumeOwner(Resume resume, Long userId) {
+        if (!resume.getUser().getId().equals(userId)) {
+            throw new BusinessException(ErrorCode.RESUME_ACCESS_DENIED);
+        }
     }
 
     @Override

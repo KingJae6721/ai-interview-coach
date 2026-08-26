@@ -1,6 +1,8 @@
 export interface InterviewCreateRequest {
   jobPositionId: number;
   title: string;
+  jobPostingId?: number;
+  resumeId?: number;
 }
 
 export type InterviewStatus =
@@ -38,6 +40,48 @@ export interface JobPositionResponse {
   companyId: number;
   companyName: string;
   techStack: string[];
+}
+
+export interface JobPostingAnalyzeRequest {
+  jobPositionId: number;
+  postingUrl: string;
+}
+
+export interface JobPostingAnalyzeResponse {
+  jobPostingId: number;
+  jobPositionId: number;
+  postingUrl: string;
+  title: string;
+  companyName: string;
+  positionName: string;
+  responsibilities: string[];
+  requiredQualifications: string[];
+  preferredQualifications: string[];
+  techStack: string[];
+  experienceRequirements: string[];
+  keywords: string[];
+  summary: string;
+  analyzedAt: string;
+}
+
+export interface ResumeSummaryResponse {
+  resumeId: number;
+  originalFileName: string;
+  createdAt: string;
+  summary: string;
+  skills: string[];
+}
+
+export interface ResumeAnalyzeResponse extends ResumeSummaryResponse {
+  fileSize: number;
+  workExperiences: string[];
+  projects: string[];
+  education: string[];
+  certifications: string[];
+  achievements: string[];
+  strengths: string[];
+  keywords: string[];
+  analyzedAt: string;
 }
 
 export type QuestionCategory =
