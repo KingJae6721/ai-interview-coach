@@ -9,6 +9,7 @@ import com.aiinterview.feedback.service.FeedbackService;
 import com.aiinterview.interview.dto.InterviewCreateResponse;
 import com.aiinterview.interview.dto.InterviewCreateRequest;
 import com.aiinterview.interview.dto.InterviewCompleteResponse;
+import com.aiinterview.interview.dto.InterviewCancelResponse;
 import com.aiinterview.interview.dto.InterviewStartResponse;
 import com.aiinterview.interview.dto.InterviewStateResponse;
 import com.aiinterview.interview.dto.InterviewAnswerCreateRequest;
@@ -124,6 +125,16 @@ public class InterviewController {
             @PathVariable Long interviewId) {
 
         InterviewCompleteResponse response = interviewService.completeInterview(userDetails.getId(), interviewId);
+
+        return ResponseEntity.ok(ApiResponse.success(ResultCode.SUCCESS, response));
+    }
+
+    @PostMapping("/{interviewId}/cancel")
+    public ResponseEntity<ApiResponse<InterviewCancelResponse>> cancelInterview(
+            @AuthenticationPrincipal CustomUserDetails userDetails,
+            @PathVariable Long interviewId) {
+
+        InterviewCancelResponse response = interviewService.cancelInterview(userDetails.getId(), interviewId);
 
         return ResponseEntity.ok(ApiResponse.success(ResultCode.SUCCESS, response));
     }

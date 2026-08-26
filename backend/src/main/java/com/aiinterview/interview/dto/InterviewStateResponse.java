@@ -15,13 +15,15 @@ public class InterviewStateResponse {
     private final LocalDateTime createdAt;
     private final LocalDateTime startedAt;
     private final LocalDateTime completedAt;
+    private final LocalDateTime cancelledAt;
     private final Long jobPositionId;
     private final String positionName;
     private final String companyName;
 
     @Builder
     public InterviewStateResponse(Long interviewId, String title, InterviewStatus status, LocalDateTime createdAt,
-                                  LocalDateTime startedAt, LocalDateTime completedAt, Long jobPositionId,
+                                  LocalDateTime startedAt, LocalDateTime completedAt, LocalDateTime cancelledAt,
+                                  Long jobPositionId,
                                   String positionName, String companyName) {
         this.interviewId = interviewId;
         this.title = title;
@@ -29,6 +31,7 @@ public class InterviewStateResponse {
         this.createdAt = createdAt;
         this.startedAt = startedAt;
         this.completedAt = completedAt;
+        this.cancelledAt = cancelledAt;
         this.jobPositionId = jobPositionId;
         this.positionName = positionName;
         this.companyName = companyName;

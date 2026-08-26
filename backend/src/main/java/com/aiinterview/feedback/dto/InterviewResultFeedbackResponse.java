@@ -6,16 +6,23 @@ import lombok.Getter;
 @Getter
 public class InterviewResultFeedbackResponse {
 
-    private final int overallScore;
+    private final Integer overallScore;
+    private final boolean partial;
+    private final int answeredCount;
+    private final int totalQuestionCount;
     private final String strengths;
     private final String weaknesses;
     private final String improvementSuggestions;
     private final String summary;
 
     @Builder
-    public InterviewResultFeedbackResponse(int overallScore, String strengths, String weaknesses,
+    public InterviewResultFeedbackResponse(Integer overallScore, boolean partial, int answeredCount,
+                                           int totalQuestionCount, String strengths, String weaknesses,
                                            String improvementSuggestions, String summary) {
         this.overallScore = overallScore;
+        this.partial = partial;
+        this.answeredCount = answeredCount;
+        this.totalQuestionCount = totalQuestionCount;
         this.strengths = strengths;
         this.weaknesses = weaknesses;
         this.improvementSuggestions = improvementSuggestions;

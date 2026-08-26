@@ -52,6 +52,9 @@ public class Interview extends BaseEntity {
     @Column(name = "started_at")
     private LocalDateTime startedAt;
 
+    @Column(name = "cancelled_at")
+    private LocalDateTime cancelledAt;
+
     @Builder
     private Interview(User user, JobPosition jobPosition, String title, InterviewStatus status) {
         this.user = user;
@@ -70,5 +73,10 @@ public class Interview extends BaseEntity {
             this.status = InterviewStatus.COMPLETED;
             this.completedAt = LocalDateTime.now();
         }
+    }
+
+    public void cancel() {
+        this.status = InterviewStatus.CANCELLED;
+        this.cancelledAt = LocalDateTime.now();
     }
 }

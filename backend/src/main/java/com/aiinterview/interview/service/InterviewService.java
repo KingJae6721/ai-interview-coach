@@ -5,6 +5,7 @@ import com.aiinterview.interview.dto.InterviewAnswerCreateResponse;
 import com.aiinterview.interview.dto.InterviewCreateResponse;
 import com.aiinterview.interview.dto.InterviewCreateRequest;
 import com.aiinterview.interview.dto.InterviewCompleteResponse;
+import com.aiinterview.interview.dto.InterviewCancelResponse;
 import com.aiinterview.interview.dto.InterviewStartResponse;
 import com.aiinterview.interview.dto.InterviewStateResponse;
 import com.aiinterview.interview.dto.InterviewQuestionResponse;
@@ -35,4 +36,6 @@ public interface InterviewService {
     InterviewFollowUpQuestionResponse generateFollowUpQuestion(Long userId, Long questionId);
 
     InterviewCompleteResponse completeInterview(Long userId, Long interviewId);
+
+    InterviewCancelResponse cancelInterview(Long userId, Long interviewId);
 }

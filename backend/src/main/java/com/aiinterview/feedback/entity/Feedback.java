@@ -30,8 +30,17 @@ public class Feedback extends BaseEntity {
     @JoinColumn(name = "interview_id", nullable = false, unique = true)
     private Interview interview;
 
-    @Column(name = "overall_score", nullable = false)
-    private int overallScore;
+    @Column(name = "overall_score")
+    private Integer overallScore;
+
+    @Column(nullable = false)
+    private boolean partial;
+
+    @Column(name = "answered_count", nullable = false)
+    private int answeredCount;
+
+    @Column(name = "total_question_count", nullable = false)
+    private int totalQuestionCount;
 
     @Column(nullable = false, columnDefinition = "TEXT")
     private String strengths;
@@ -49,10 +58,14 @@ public class Feedback extends BaseEntity {
     private String aiModel;
 
     @Builder
-    private Feedback(Interview interview, int overallScore, String strengths, String weaknesses,
+    private Feedback(Interview interview, Integer overallScore, boolean partial, int answeredCount,
+                     int totalQuestionCount, String strengths, String weaknesses,
                      String improvementSuggestions, String summary, String aiModel) {
         this.interview = interview;
         this.overallScore = overallScore;
+        this.partial = partial;
+        this.answeredCount = answeredCount;
+        this.totalQuestionCount = totalQuestionCount;
         this.strengths = strengths;
         this.weaknesses = weaknesses;
         this.improvementSuggestions = improvementSuggestions;

@@ -39,6 +39,8 @@ import java.util.stream.Collectors;
 @RequiredArgsConstructor
 public class FeedbackServiceImpl implements FeedbackService {
 
+    private static final int MINIMUM_PARTIAL_FEEDBACK_ANSWER_COUNT = 2;
+
     private final FeedbackRepository feedbackRepository;
     private final InterviewRepository interviewRepository;
     private final InterviewQuestionRepository interviewQuestionRepository;
@@ -50,9 +52,9 @@ public class FeedbackServiceImpl implements FeedbackService {
     @Override
     @Transactional(propagation = Propagation.NOT_SUPPORTED)
     public FeedbackGenerateResponse generateFeedback(Long userId, Long interviewId) {
-        InterviewFeedbackRequest request = prepareFeedbackRequest(userId, interviewId);
-        InterviewFeedbackResult result = aiService.generateInterviewFeedback(request);
-        Feedback feedback = saveFeedback(interviewId, result);
+        FeedbackGenerationContext context = prepareFeedbackRequest(userId, interviewId);
+        InterviewFeedbackResult result = aiService.generateInterviewFeedback(context.request());
+        Feedback feedback = saveFeedback(interviewId, result, context);
 
         log.info("Interview feedback generated - interviewId: {}, feedbackId: {}", interviewId, feedback.getId());
 
@@ -60,6 +62,9 @@ public class FeedbackServiceImpl implements FeedbackService {
                 .feedbackId(feedback.getId())
                 .interviewId(interviewId)
                 .overallScore(feedback.getOverallScore())
+                .partial(feedback.isPartial())
+                .answeredCount(feedback.getAnsweredCount())
+                .totalQuestionCount(feedback.getTotalQuestionCount())
                 .strengths(feedback.getStrengths())
                 .weaknesses(feedback.getWeaknesses())
                 .improvementSuggestions(feedback.getImprovementSuggestions())
@@ -73,7 +78,7 @@ public class FeedbackServiceImpl implements FeedbackService {
         Interview interview = interviewRepository.findWithUserAndJobPositionAndCompanyById(interviewId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.INTERVIEW_NOT_FOUND));
 
-        validateCompletedInterviewOwner(userId, interview);
+        validateResultInterviewOwner(userId, interview);
 
         Feedback feedback = feedbackRepository.findByInterviewId(interviewId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.FEEDBACK_NOT_FOUND));
@@ -81,7 +86,9 @@ public class FeedbackServiceImpl implements FeedbackService {
         List<InterviewQuestion> questions = interviewQuestionExecutionOrderResolver.resolve(
                 interviewQuestionRepository.findAllByInterviewIdWithParentOrderByQuestionOrderAsc(interviewId));
         List<InterviewAnswer> answers = interviewAnswerRepository.findAllByInterviewIdWithQuestion(interviewId);
-        validateQuestionAnswers(questions, answers);
+        if (interview.getStatus() == InterviewStatus.COMPLETED) {
+            validateQuestionAnswers(questions, answers);
+        }
 
         Map<Long, InterviewAnswer> answerByQuestionId = answers.stream()
                 .collect(Collectors.toMap(
@@ -94,8 +101,11 @@ public class FeedbackServiceImpl implements FeedbackService {
                 .collect(Collectors.toMap(evaluation -> evaluation.getAnswer().getId(), Function.identity()));
 
         List<InterviewResultQuestionAnswerResponse> questionAnswers = questions.stream()
-                .map(question -> toQuestionAnswerResponse(question, answerByQuestionId.get(question.getId()),
-                        evaluationByAnswerId.get(answerByQuestionId.get(question.getId()).getId())))
+                .map(question -> {
+                    InterviewAnswer answer = answerByQuestionId.get(question.getId());
+                    QuestionEvaluation evaluation = answer == null ? null : evaluationByAnswerId.get(answer.getId());
+                    return toQuestionAnswerResponse(question, answer, evaluation);
+                })
                 .toList();
 
         return InterviewResultResponse.builder()
@@ -103,6 +113,7 @@ public class FeedbackServiceImpl implements FeedbackService {
                 .title(interview.getTitle())
                 .status(interview.getStatus())
                 .completedAt(interview.getCompletedAt())
+                .cancelledAt(interview.getCancelledAt())
                 .companyName(interview.getJobPosition() == null ? null : interview.getJobPosition().getCompany().getName())
                 .positionName(interview.getJobPosition() == null ? null : interview.getJobPosition().getName())
                 .questionAnswers(questionAnswers)
@@ -110,24 +121,32 @@ public class FeedbackServiceImpl implements FeedbackService {
                 .build();
     }
 
-    private InterviewFeedbackRequest prepareFeedbackRequest(Long userId, Long interviewId) {
+    private FeedbackGenerationContext prepareFeedbackRequest(Long userId, Long interviewId) {
         Interview interview = interviewRepository.findWithUserById(interviewId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.INTERVIEW_NOT_FOUND));
 
-        validateFeedbackGeneration(userId, interview);
+        boolean partial = validateFeedbackGeneration(userId, interview);
 
         List<InterviewQuestion> questions = interviewQuestionExecutionOrderResolver.resolve(
                 interviewQuestionRepository.findAllByInterviewIdWithParentOrderByQuestionOrderAsc(interviewId));
         List<InterviewAnswer> answers = interviewAnswerRepository.findAllByInterviewIdWithQuestion(interviewId);
-        validateQuestionAnswers(questions, answers);
-
         Map<Long, InterviewAnswer> answerByQuestionId = answers.stream()
                 .collect(Collectors.toMap(
                         answer -> answer.getInterviewQuestion().getId(),
                         Function.identity()
                 ));
 
-        List<InterviewFeedbackRequest.QuestionAnswer> questionAnswers = questions.stream()
+        List<InterviewQuestion> answeredQuestions = questions.stream()
+                .filter(question -> answerByQuestionId.containsKey(question.getId()))
+                .toList();
+
+        if (partial) {
+            validatePartialQuestionAnswers(answeredQuestions);
+        } else {
+            validateQuestionAnswers(questions, answers);
+        }
+
+        List<InterviewFeedbackRequest.QuestionAnswer> questionAnswers = answeredQuestions.stream()
                 .map(question -> InterviewFeedbackRequest.QuestionAnswer.builder()
                         .questionOrder(question.getQuestionOrder())
                         .questionContent(question.getContent())
@@ -135,26 +154,38 @@ public class FeedbackServiceImpl implements FeedbackService {
                         .build())
                 .toList();
 
-        return InterviewFeedbackRequest.builder()
+        InterviewFeedbackRequest request = InterviewFeedbackRequest.builder()
                 .interviewTitle(interview.getTitle())
+                .partial(partial)
+                .answeredCount(answeredQuestions.size())
+                .totalQuestionCount(questions.size())
                 .questionAnswers(questionAnswers)
                 .build();
+
+        return new FeedbackGenerationContext(request, partial, answeredQuestions.size(), questions.size());
     }
 
-    private void validateFeedbackGeneration(Long userId, Interview interview) {
-        validateCompletedInterviewOwner(userId, interview);
+    private boolean validateFeedbackGeneration(Long userId, Interview interview) {
+        if (!interview.getUser().getId().equals(userId)) {
+            throw new BusinessException(ErrorCode.ACCESS_DENIED);
+        }
+        if (interview.getStatus() != InterviewStatus.COMPLETED && interview.getStatus() != InterviewStatus.CANCELLED) {
+            throw new BusinessException(ErrorCode.INTERVIEW_NOT_COMPLETED);
+        }
 
         if (feedbackRepository.existsByInterviewId(interview.getId())) {
             throw new BusinessException(ErrorCode.FEEDBACK_ALREADY_EXISTS);
         }
+
+        return interview.getStatus() == InterviewStatus.CANCELLED;
     }
 
-    private void validateCompletedInterviewOwner(Long userId, Interview interview) {
+    private void validateResultInterviewOwner(Long userId, Interview interview) {
         if (!interview.getUser().getId().equals(userId)) {
             throw new BusinessException(ErrorCode.ACCESS_DENIED);
         }
 
-        if (interview.getStatus() != InterviewStatus.COMPLETED) {
+        if (interview.getStatus() != InterviewStatus.COMPLETED && interview.getStatus() != InterviewStatus.CANCELLED) {
             throw new BusinessException(ErrorCode.INTERVIEW_NOT_COMPLETED);
         }
     }
@@ -165,12 +196,21 @@ public class FeedbackServiceImpl implements FeedbackService {
         }
     }
 
-    private Feedback saveFeedback(Long interviewId, InterviewFeedbackResult result) {
+    private void validatePartialQuestionAnswers(List<InterviewQuestion> answeredQuestions) {
+        if (answeredQuestions.size() < MINIMUM_PARTIAL_FEEDBACK_ANSWER_COUNT) {
+            throw new BusinessException(ErrorCode.PARTIAL_FEEDBACK_GENERATION_NOT_AVAILABLE);
+        }
+    }
+
+    private Feedback saveFeedback(Long interviewId, InterviewFeedbackResult result, FeedbackGenerationContext context) {
         try {
             Interview interview = interviewRepository.getReferenceById(interviewId);
             return feedbackRepository.saveAndFlush(Feedback.builder()
                     .interview(interview)
-                    .overallScore(result.getOverallScore())
+                    .overallScore(context.partial() ? null : result.getOverallScore())
+                    .partial(context.partial())
+                    .answeredCount(context.answeredCount())
+                    .totalQuestionCount(context.totalQuestionCount())
                     .strengths(result.getStrengths())
                     .weaknesses(result.getWeaknesses())
                     .improvementSuggestions(result.getImprovementSuggestions())
@@ -193,8 +233,8 @@ public class FeedbackServiceImpl implements FeedbackService {
                 .category(question.getCategory())
                 .difficulty(question.getDifficulty())
                 .followUp(question.getParentQuestion() != null)
-                .answerContent(answer.getAnswerContent())
-                .answeredAt(answer.getAnsweredAt())
+                .answerContent(answer == null ? null : answer.getAnswerContent())
+                .answeredAt(answer == null ? null : answer.getAnsweredAt())
                 .evaluation(evaluation == null ? null : toQuestionEvaluationResponse(evaluation))
                 .build();
     }
@@ -213,10 +253,17 @@ public class FeedbackServiceImpl implements FeedbackService {
     private InterviewResultFeedbackResponse toFeedbackResponse(Feedback feedback) {
         return InterviewResultFeedbackResponse.builder()
                 .overallScore(feedback.getOverallScore())
+                .partial(feedback.isPartial())
+                .answeredCount(feedback.getAnsweredCount())
+                .totalQuestionCount(feedback.getTotalQuestionCount())
                 .strengths(feedback.getStrengths())
                 .weaknesses(feedback.getWeaknesses())
                 .improvementSuggestions(feedback.getImprovementSuggestions())
                 .summary(feedback.getSummary())
                 .build();
+    }
+
+    private record FeedbackGenerationContext(InterviewFeedbackRequest request, boolean partial,
+                                             int answeredCount, int totalQuestionCount) {
     }
 }

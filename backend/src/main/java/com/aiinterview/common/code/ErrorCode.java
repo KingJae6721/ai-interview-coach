@@ -37,6 +37,8 @@ public enum ErrorCode {
     INTERVIEW_ALREADY_COMPLETED(HttpStatus.CONFLICT, "이미 완료된 면접입니다."),
     INTERVIEW_NOT_IN_PROGRESS(HttpStatus.CONFLICT, "진행 중인 면접이 아닙니다."),
 
+    INTERVIEW_NOT_CANCELLABLE(HttpStatus.CONFLICT, "Only in-progress interviews can be cancelled."),
+    INTERVIEW_ALREADY_CANCELLED(HttpStatus.CONFLICT, "This interview has already been cancelled."),
     INTERVIEW_QUESTION_NOT_FOUND(HttpStatus.NOT_FOUND, "Interview question not found."),
     INTERVIEW_ANSWER_NOT_FOUND(HttpStatus.NOT_FOUND, "Interview answer not found."),
     INTERVIEW_ANSWER_ALREADY_EXISTS(HttpStatus.CONFLICT, "An answer already exists for this interview question."),
@@ -45,6 +47,8 @@ public enum ErrorCode {
     INTERVIEW_NOT_COMPLETABLE(HttpStatus.CONFLICT, "All interview questions must be answered before completion."),
     INTERVIEW_NOT_COMPLETED(HttpStatus.CONFLICT, "Interview must be completed before feedback generation."),
     FEEDBACK_GENERATION_NOT_AVAILABLE(HttpStatus.CONFLICT, "Interview questions and answers are required."),
+    PARTIAL_FEEDBACK_GENERATION_NOT_AVAILABLE(HttpStatus.CONFLICT,
+            "At least two answers are required for partial feedback generation."),
     FEEDBACK_ALREADY_EXISTS(HttpStatus.CONFLICT, "Feedback already exists for this interview."),
     FEEDBACK_NOT_FOUND(HttpStatus.NOT_FOUND, "Feedback not found."),
     QUESTION_EVALUATION_ALREADY_EXISTS(HttpStatus.CONFLICT, "Question evaluation already exists for this answer."),

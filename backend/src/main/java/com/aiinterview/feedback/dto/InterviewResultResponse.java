@@ -14,6 +14,7 @@ public class InterviewResultResponse {
     private final String title;
     private final InterviewStatus status;
     private final LocalDateTime completedAt;
+    private final LocalDateTime cancelledAt;
     private final String companyName;
     private final String positionName;
     private final List<InterviewResultQuestionAnswerResponse> questionAnswers;
@@ -21,13 +22,14 @@ public class InterviewResultResponse {
 
     @Builder
     public InterviewResultResponse(Long interviewId, String title, InterviewStatus status, LocalDateTime completedAt,
-                                   String companyName, String positionName,
+                                   LocalDateTime cancelledAt, String companyName, String positionName,
                                    List<InterviewResultQuestionAnswerResponse> questionAnswers,
                                    InterviewResultFeedbackResponse feedback) {
         this.interviewId = interviewId;
         this.title = title;
         this.status = status;
         this.completedAt = completedAt;
+        this.cancelledAt = cancelledAt;
         this.companyName = companyName;
         this.positionName = positionName;
         this.questionAnswers = questionAnswers;

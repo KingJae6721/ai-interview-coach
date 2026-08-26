@@ -9,11 +9,18 @@ import java.util.List;
 public class InterviewFeedbackRequest {
 
     private final String interviewTitle;
+    private final boolean partial;
+    private final int answeredCount;
+    private final int totalQuestionCount;
     private final List<QuestionAnswer> questionAnswers;
 
     @Builder
-    public InterviewFeedbackRequest(String interviewTitle, List<QuestionAnswer> questionAnswers) {
+    public InterviewFeedbackRequest(String interviewTitle, boolean partial, int answeredCount,
+                                    int totalQuestionCount, List<QuestionAnswer> questionAnswers) {
         this.interviewTitle = interviewTitle;
+        this.partial = partial;
+        this.answeredCount = answeredCount;
+        this.totalQuestionCount = totalQuestionCount;
         this.questionAnswers = questionAnswers;
     }
 

@@ -12,6 +12,7 @@ import com.aiinterview.interview.dto.InterviewAnswerCreateResponse;
 import com.aiinterview.interview.dto.InterviewCreateResponse;
 import com.aiinterview.interview.dto.InterviewCreateRequest;
 import com.aiinterview.interview.dto.InterviewCompleteResponse;
+import com.aiinterview.interview.dto.InterviewCancelResponse;
 import com.aiinterview.interview.dto.InterviewCompleteUnavailableResponse;
 import com.aiinterview.interview.dto.InterviewStartResponse;
 import com.aiinterview.interview.dto.InterviewStateResponse;
@@ -137,6 +138,9 @@ public class InterviewServiceImpl implements InterviewService {
         if (interview.getStatus() == InterviewStatus.COMPLETED) {
             throw new BusinessException(ErrorCode.INTERVIEW_ALREADY_COMPLETED);
         }
+        if (interview.getStatus() == InterviewStatus.CANCELLED) {
+            throw new BusinessException(ErrorCode.INTERVIEW_ALREADY_CANCELLED);
+        }
 
         interview.start();
 
@@ -166,6 +170,7 @@ public class InterviewServiceImpl implements InterviewService {
                 .createdAt(interview.getCreatedAt())
                 .startedAt(interview.getStartedAt())
                 .completedAt(interview.getCompletedAt())
+                .cancelledAt(interview.getCancelledAt())
                 .jobPositionId(jobPosition == null ? null : jobPosition.getId())
                 .positionName(jobPosition == null ? null : jobPosition.getName())
                 .companyName(jobPosition == null ? null : jobPosition.getCompany().getName())
@@ -300,6 +305,28 @@ public class InterviewServiceImpl implements InterviewService {
                 .build();
     }
 
+    @Override
+    @Transactional
+    public InterviewCancelResponse cancelInterview(Long userId, Long interviewId) {
+        Interview interview = interviewRepository.findWithUserById(interviewId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.INTERVIEW_NOT_FOUND));
+
+        if (!interview.getUser().getId().equals(userId)) {
+            throw new BusinessException(ErrorCode.ACCESS_DENIED);
+        }
+        if (interview.getStatus() != InterviewStatus.IN_PROGRESS) {
+            throw new BusinessException(ErrorCode.INTERVIEW_NOT_CANCELLABLE);
+        }
+
+        interview.cancel();
+
+        return InterviewCancelResponse.builder()
+                .interviewId(interview.getId())
+                .status(interview.getStatus())
+                .cancelledAt(interview.getCancelledAt())
+                .build();
+    }
+
     private InterviewAnswerCreateResponse toAnswerResponse(InterviewAnswer interviewAnswer, boolean created) {
         return InterviewAnswerCreateResponse.builder()
                 .answerId(interviewAnswer.getId())
@@ -318,10 +345,14 @@ public class InterviewServiceImpl implements InterviewService {
                 .title(interview.getTitle())
                 .status(interview.getStatus())
                 .createdAt(interview.getCreatedAt())
+                .startedAt(interview.getStartedAt())
                 .completedAt(interview.getCompletedAt())
+                .cancelledAt(interview.getCancelledAt())
                 .companyName(jobPosition == null ? null : jobPosition.getCompany().getName())
                 .positionName(jobPosition == null ? null : jobPosition.getName())
                 .overallScore(feedback == null ? null : feedback.getOverallScore())
+                .feedbackExists(feedback != null)
+                .partial(feedback != null && feedback.isPartial())
                 .build();
     }
 
@@ -344,6 +375,9 @@ public class InterviewServiceImpl implements InterviewService {
         }
         if (interview.getStatus() == InterviewStatus.COMPLETED) {
             throw new BusinessException(ErrorCode.INTERVIEW_ALREADY_COMPLETED);
+        }
+        if (interview.getStatus() == InterviewStatus.CANCELLED) {
+            throw new BusinessException(ErrorCode.INTERVIEW_ALREADY_CANCELLED);
         }
     }
 
