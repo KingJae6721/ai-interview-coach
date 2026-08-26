@@ -9,6 +9,7 @@ import com.aiinterview.evaluation.entity.QuestionEvaluation;
 import com.aiinterview.evaluation.repository.QuestionEvaluationRepository;
 import com.aiinterview.feedback.repository.FeedbackRepository;
 import com.aiinterview.interview.entity.Interview;
+import com.aiinterview.interview.entity.InterviewQuestion;
 import com.aiinterview.interview.entity.InterviewStatus;
 import com.aiinterview.interview.repository.InterviewAnswerRepository;
 import com.aiinterview.interview.repository.InterviewQuestionRepository;
@@ -40,6 +41,7 @@ import org.testcontainers.containers.PostgreSQLContainer;
 import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
 import org.testcontainers.utility.DockerImageName;
+import org.mockito.ArgumentCaptor;
 
 import java.util.List;
 import java.util.Optional;
@@ -321,6 +323,11 @@ class InterviewFlowIntegrationTest {
                 .andExpect(status().isConflict())
                 .andExpect(jsonPath("$.code").value("INTERVIEW_ALREADY_COMPLETED"));
 
+        mockMvc.perform(post("/api/v1/interviews/{interviewId}/cancel", interviewId)
+                        .header("Authorization", bearer(ownerToken)))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.code").value("INTERVIEW_NOT_CANCELLABLE"));
+
         mockMvc.perform(post("/api/v1/interviews/{interviewId}/feedback", interviewId)
                         .header("Authorization", bearer(ownerToken)))
                 .andExpect(status().isCreated())
@@ -363,6 +370,232 @@ class InterviewFlowIntegrationTest {
                 .andExpect(jsonPath("$.data.questionAnswers[1].evaluation").doesNotExist())
                 .andExpect(jsonPath("$.data.feedback.overallScore").value(90));
         assertThat(interviewAnswerRepository.countByInterviewQuestionInterviewId(interviewId)).isEqualTo(6);
+
+        mockMvc.perform(get("/api/v1/dashboard/summary")
+                        .header("Authorization", bearer(ownerToken)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.cancelledInterviews").value(0))
+                .andExpect(jsonPath("$.data.recentInterviews[0].status").value("COMPLETED"))
+                .andExpect(jsonPath("$.data.recentInterviews[0].feedbackExists").value(true))
+                .andExpect(jsonPath("$.data.recentInterviews[0].partial").value(false));
+
+        InterviewQuestion evaluatedQuestion = interviewQuestionRepository.findById(firstQuestionId).orElseThrow();
+        Interview completedInterview = interviewRepository.findById(interviewId).orElseThrow();
+        interviewQuestionRepository.save(InterviewQuestion.builder()
+                .interview(completedInterview)
+                .questionOrder(100)
+                .content("Unevaluated question")
+                .category(evaluatedQuestion.getCategory())
+                .difficulty(evaluatedQuestion.getDifficulty())
+                .type(evaluatedQuestion.getType())
+                .isAiGenerated(true)
+                .build());
+
+        MvcResult weaknessResult = mockMvc.perform(get("/api/v1/dashboard/weaknesses")
+                        .header("Authorization", bearer(ownerToken)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.performanceAnalysisAvailable").value(true))
+                .andReturn();
+        JsonNode weaknessData = responseData(weaknessResult);
+        JsonNode categoryStatistic = findDashboardStatistic(weaknessData.path("categoryStatistics"), "category",
+                evaluatedQuestion.getCategory().name());
+        assertThat(categoryStatistic.path("questionCount").asLong()).isEqualTo(2);
+        assertThat(categoryStatistic.path("evaluationCount").asLong()).isEqualTo(1);
+        JsonNode difficultyStatistic = findDashboardStatistic(weaknessData.path("difficultyStatistics"), "difficulty",
+                evaluatedQuestion.getDifficulty().name());
+        assertThat(difficultyStatistic.path("questionCount").asLong()).isGreaterThan(1);
+        assertThat(difficultyStatistic.path("evaluationCount").asLong()).isEqualTo(1);
+    }
+
+    @Test
+    void cancelledInterview_generatesPartialFeedbackWithoutAffectingScoreStatistics() throws Exception {
+        long interviewId = createInterview();
+
+        mockMvc.perform(post("/api/v1/interviews/{interviewId}/start", interviewId)
+                        .header("Authorization", bearer(ownerToken)))
+                .andExpect(status().isOk());
+
+        JsonNode progress = getProgress(interviewId, ownerToken);
+        long firstQuestionId = progress.path("questions").get(0).path("questionId").asLong();
+        long secondQuestionId = progress.path("questions").get(1).path("questionId").asLong();
+        submitAnswer(interviewId, firstQuestionId, ownerToken, "first answer")
+                .andExpect(status().isCreated());
+        submitAnswer(interviewId, secondQuestionId, ownerToken, "second answer")
+                .andExpect(status().isCreated());
+
+        mockMvc.perform(post("/api/v1/interviews/{interviewId}/cancel", interviewId)
+                        .header("Authorization", bearer(otherUserToken)))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.code").value("ACCESS_DENIED"));
+
+        mockMvc.perform(post("/api/v1/interviews/{interviewId}/cancel", interviewId)
+                        .header("Authorization", bearer(ownerToken)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.status").value("CANCELLED"))
+                .andExpect(jsonPath("$.data.cancelledAt").exists());
+        assertThat(interviewRepository.findById(interviewId))
+                .hasValueSatisfying(interview -> {
+                    assertThat(interview.getStatus()).isEqualTo(InterviewStatus.CANCELLED);
+                    assertThat(interview.getCancelledAt()).isNotNull();
+                    assertThat(interview.getCompletedAt()).isNull();
+                });
+
+        mockMvc.perform(post("/api/v1/interviews/{interviewId}/cancel", interviewId)
+                        .header("Authorization", bearer(ownerToken)))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.code").value("INTERVIEW_NOT_CANCELLABLE"));
+
+        mockMvc.perform(post("/api/v1/interviews/{interviewId}/feedback", interviewId)
+                        .header("Authorization", bearer(ownerToken)))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.data.partial").value(true))
+                .andExpect(jsonPath("$.data.answeredCount").value(2))
+                .andExpect(jsonPath("$.data.totalQuestionCount").value(5))
+                .andExpect(jsonPath("$.data.overallScore").doesNotExist());
+        ArgumentCaptor<com.aiinterview.ai.dto.InterviewFeedbackRequest> feedbackRequestCaptor =
+                ArgumentCaptor.forClass(com.aiinterview.ai.dto.InterviewFeedbackRequest.class);
+        then(aiService).should().generateInterviewFeedback(feedbackRequestCaptor.capture());
+        assertThat(feedbackRequestCaptor.getValue().isPartial()).isTrue();
+        assertThat(feedbackRequestCaptor.getValue().getQuestionAnswers()).hasSize(2);
+        assertThat(feedbackRepository.findByInterviewId(interviewId))
+                .hasValueSatisfying(feedback -> {
+                    assertThat(feedback.isPartial()).isTrue();
+                    assertThat(feedback.getOverallScore()).isNull();
+                });
+
+        mockMvc.perform(post("/api/v1/interviews/{interviewId}/feedback", interviewId)
+                        .header("Authorization", bearer(ownerToken)))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.code").value("FEEDBACK_ALREADY_EXISTS"));
+
+        mockMvc.perform(get("/api/v1/interviews/{interviewId}/result", interviewId)
+                        .header("Authorization", bearer(ownerToken)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.status").value("CANCELLED"))
+                .andExpect(jsonPath("$.data.cancelledAt").exists())
+                .andExpect(jsonPath("$.data.feedback.partial").value(true))
+                .andExpect(jsonPath("$.data.feedback.answeredCount").value(2))
+                .andExpect(jsonPath("$.data.feedback.overallScore").doesNotExist())
+                .andExpect(jsonPath("$.data.questionAnswers.length()").value(5));
+
+        mockMvc.perform(get("/api/v1/dashboard/summary")
+                        .header("Authorization", bearer(ownerToken)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.totalInterviews").value(1))
+                .andExpect(jsonPath("$.data.completedInterviews").value(0))
+                .andExpect(jsonPath("$.data.cancelledInterviews").value(1))
+                .andExpect(jsonPath("$.data.recentInterviews[0].cancelledAt").exists())
+                .andExpect(jsonPath("$.data.recentInterviews[0].feedbackExists").value(true))
+                .andExpect(jsonPath("$.data.recentInterviews[0].partial").value(true))
+                .andExpect(jsonPath("$.data.averageScore").doesNotExist())
+                .andExpect(jsonPath("$.data.highestScore").doesNotExist());
+    }
+
+    @Test
+    void cancelledInterview_withFewerThanTwoAnswers_cannotGeneratePartialFeedback() throws Exception {
+        long interviewId = createInterview();
+
+        mockMvc.perform(post("/api/v1/interviews/{interviewId}/start", interviewId)
+                        .header("Authorization", bearer(ownerToken)))
+                .andExpect(status().isOk());
+        mockMvc.perform(post("/api/v1/interviews/{interviewId}/cancel", interviewId)
+                        .header("Authorization", bearer(ownerToken)))
+                .andExpect(status().isOk());
+
+        mockMvc.perform(post("/api/v1/interviews/{interviewId}/feedback", interviewId)
+                        .header("Authorization", bearer(ownerToken)))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.code").value("PARTIAL_FEEDBACK_GENERATION_NOT_AVAILABLE"));
+
+        mockMvc.perform(get("/api/v1/dashboard/summary")
+                        .header("Authorization", bearer(ownerToken)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.recentInterviews[0].status").value("CANCELLED"))
+                .andExpect(jsonPath("$.data.recentInterviews[0].cancelledAt").exists())
+                .andExpect(jsonPath("$.data.recentInterviews[0].feedbackExists").value(false))
+                .andExpect(jsonPath("$.data.recentInterviews[0].partial").value(false));
+    }
+
+    @Test
+    void interviewHistory_returnsLifecycleAndFeedbackMetadataInCreatedAtDescendingOrder() throws Exception {
+        long readyInterviewId = createInterview();
+
+        long inProgressInterviewId = createInterview();
+        startInterview(inProgressInterviewId);
+
+        long cancelledWithoutFeedbackInterviewId = createInterview();
+        startInterview(cancelledWithoutFeedbackInterviewId);
+        cancelInterview(cancelledWithoutFeedbackInterviewId);
+
+        long cancelledWithPartialFeedbackInterviewId = createInterview();
+        startInterview(cancelledWithPartialFeedbackInterviewId);
+        JsonNode partialProgress = getProgress(cancelledWithPartialFeedbackInterviewId, ownerToken);
+        submitAnswer(cancelledWithPartialFeedbackInterviewId,
+                partialProgress.path("questions").get(0).path("questionId").asLong(), ownerToken, "first answer")
+                .andExpect(status().isCreated());
+        submitAnswer(cancelledWithPartialFeedbackInterviewId,
+                partialProgress.path("questions").get(1).path("questionId").asLong(), ownerToken, "second answer")
+                .andExpect(status().isCreated());
+        cancelInterview(cancelledWithPartialFeedbackInterviewId);
+        mockMvc.perform(post("/api/v1/interviews/{interviewId}/feedback", cancelledWithPartialFeedbackInterviewId)
+                        .header("Authorization", bearer(ownerToken)))
+                .andExpect(status().isCreated());
+
+        long completedInterviewId = createInterview();
+        startInterview(completedInterviewId);
+        JsonNode completedProgress = getProgress(completedInterviewId, ownerToken);
+        while (!completedProgress.path("allAnswered").asBoolean()) {
+            long questionId = completedProgress.path("nextQuestionId").asLong();
+            submitAnswer(completedInterviewId, questionId, ownerToken, "answer for " + questionId)
+                    .andExpect(status().isCreated());
+            completedProgress = getProgress(completedInterviewId, ownerToken);
+        }
+        mockMvc.perform(post("/api/v1/interviews/{interviewId}/complete", completedInterviewId)
+                        .header("Authorization", bearer(ownerToken)))
+                .andExpect(status().isOk());
+        mockMvc.perform(post("/api/v1/interviews/{interviewId}/feedback", completedInterviewId)
+                        .header("Authorization", bearer(ownerToken)))
+                .andExpect(status().isCreated());
+
+        MvcResult historyResult = mockMvc.perform(get("/api/v1/interviews?page=0&size=10")
+                        .header("Authorization", bearer(ownerToken)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value("SUCCESS"))
+                .andExpect(jsonPath("$.data.content.length()").value(5))
+                .andExpect(jsonPath("$.data.content[0].interviewId").value(completedInterviewId))
+                .andReturn();
+
+        JsonNode content = responseData(historyResult).path("content");
+        JsonNode ready = findHistoryItem(content, readyInterviewId);
+        assertThat(ready.path("status").asText()).isEqualTo("READY");
+        assertThat(ready.path("startedAt").isNull()).isTrue();
+        assertThat(ready.path("cancelledAt").isNull()).isTrue();
+        assertThat(ready.path("feedbackExists").asBoolean()).isFalse();
+        assertThat(ready.path("partial").asBoolean()).isFalse();
+
+        JsonNode inProgress = findHistoryItem(content, inProgressInterviewId);
+        assertThat(inProgress.path("status").asText()).isEqualTo("IN_PROGRESS");
+        assertThat(inProgress.path("startedAt").asText()).isNotBlank();
+        assertThat(inProgress.path("cancelledAt").isNull()).isTrue();
+        assertThat(inProgress.path("feedbackExists").asBoolean()).isFalse();
+
+        JsonNode cancelledWithoutFeedback = findHistoryItem(content, cancelledWithoutFeedbackInterviewId);
+        assertThat(cancelledWithoutFeedback.path("status").asText()).isEqualTo("CANCELLED");
+        assertThat(cancelledWithoutFeedback.path("cancelledAt").asText()).isNotBlank();
+        assertThat(cancelledWithoutFeedback.path("feedbackExists").asBoolean()).isFalse();
+        assertThat(cancelledWithoutFeedback.path("partial").asBoolean()).isFalse();
+
+        JsonNode cancelledWithPartialFeedback = findHistoryItem(content, cancelledWithPartialFeedbackInterviewId);
+        assertThat(cancelledWithPartialFeedback.path("status").asText()).isEqualTo("CANCELLED");
+        assertThat(cancelledWithPartialFeedback.path("cancelledAt").asText()).isNotBlank();
+        assertThat(cancelledWithPartialFeedback.path("feedbackExists").asBoolean()).isTrue();
+        assertThat(cancelledWithPartialFeedback.path("partial").asBoolean()).isTrue();
+
+        JsonNode completed = findHistoryItem(content, completedInterviewId);
+        assertThat(completed.path("status").asText()).isEqualTo("COMPLETED");
+        assertThat(completed.path("completedAt").asText()).isNotBlank();
+        assertThat(completed.path("feedbackExists").asBoolean()).isTrue();
+        assertThat(completed.path("partial").asBoolean()).isFalse();
     }
 
     private long createInterview() throws Exception {
@@ -384,6 +617,36 @@ class InterviewFlowIntegrationTest {
                 .andExpect(jsonPath("$.code").value("SUCCESS"))
                 .andReturn();
         return responseData(result);
+    }
+
+    private void startInterview(long interviewId) throws Exception {
+        mockMvc.perform(post("/api/v1/interviews/{interviewId}/start", interviewId)
+                        .header("Authorization", bearer(ownerToken)))
+                .andExpect(status().isOk());
+    }
+
+    private void cancelInterview(long interviewId) throws Exception {
+        mockMvc.perform(post("/api/v1/interviews/{interviewId}/cancel", interviewId)
+                        .header("Authorization", bearer(ownerToken)))
+                .andExpect(status().isOk());
+    }
+
+    private JsonNode findHistoryItem(JsonNode content, long interviewId) {
+        for (JsonNode item : content) {
+            if (item.path("interviewId").asLong() == interviewId) {
+                return item;
+            }
+        }
+        throw new AssertionError("Interview history item not found: " + interviewId);
+    }
+
+    private JsonNode findDashboardStatistic(JsonNode statistics, String fieldName, String expectedValue) {
+        for (JsonNode statistic : statistics) {
+            if (expectedValue.equals(statistic.path(fieldName).asText())) {
+                return statistic;
+            }
+        }
+        throw new AssertionError("Dashboard statistic not found: " + expectedValue);
     }
 
     private org.springframework.test.web.servlet.ResultActions submitAnswer(long interviewId, long questionId,

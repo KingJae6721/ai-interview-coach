@@ -13,20 +13,27 @@ public class DashboardRecentInterviewResponse {
     private final InterviewStatus status;
     private final LocalDateTime createdAt;
     private final LocalDateTime completedAt;
+    private final LocalDateTime cancelledAt;
     private final String companyName;
     private final String positionName;
     private final Integer overallScore;
+    private final boolean feedbackExists;
+    private final boolean partial;
 
     public DashboardRecentInterviewResponse(Long interviewId, String title, InterviewStatus status,
-                                            LocalDateTime createdAt, LocalDateTime completedAt,
-                                            String companyName, String positionName, Integer overallScore) {
+                                            LocalDateTime createdAt, LocalDateTime completedAt, LocalDateTime cancelledAt,
+                                            String companyName, String positionName, Integer overallScore,
+                                            Boolean feedbackExists, Boolean partial) {
         this.interviewId = interviewId;
         this.title = title;
         this.status = status;
         this.createdAt = createdAt;
         this.completedAt = completedAt;
+        this.cancelledAt = cancelledAt;
         this.companyName = companyName;
         this.positionName = positionName;
         this.overallScore = overallScore;
+        this.feedbackExists = Boolean.TRUE.equals(feedbackExists);
+        this.partial = Boolean.TRUE.equals(partial);
     }
 }

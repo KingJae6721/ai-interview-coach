@@ -6,13 +6,15 @@ public class DashboardCategoryStatisticsProjection {
 
     private final InterviewQuestionCategory category;
     private final long interviewCount;
+    private final long questionCount;
     private final long evaluationCount;
     private final Double averageScore;
 
     public DashboardCategoryStatisticsProjection(InterviewQuestionCategory category, Long interviewCount,
-                                                 Long evaluationCount, Double averageScore) {
+                                                 Long questionCount, Long evaluationCount, Double averageScore) {
         this.category = category;
         this.interviewCount = interviewCount;
+        this.questionCount = questionCount;
         this.evaluationCount = evaluationCount;
         this.averageScore = averageScore;
     }
@@ -23,6 +25,10 @@ public class DashboardCategoryStatisticsProjection {
 
     public long getInterviewCount() {
         return interviewCount;
+    }
+
+    public long getQuestionCount() {
+        return questionCount;
     }
 
     public long getEvaluationCount() {

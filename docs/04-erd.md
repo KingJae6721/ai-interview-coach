@@ -169,6 +169,10 @@ Table interviews {
 
   started_at timestamp
 
+  completed_at timestamp
+
+  cancelled_at timestamp
+
   ended_at timestamp
 
   created_at timestamp

@@ -42,6 +42,7 @@ public class DashboardServiceImpl implements DashboardService {
         return DashboardSummaryResponse.builder()
                 .totalInterviews(statistics.getTotalInterviews())
                 .completedInterviews(statistics.getCompletedInterviews())
+                .cancelledInterviews(statistics.getCancelledInterviews())
                 .averageScore(statistics.getAverageScore())
                 .highestScore(statistics.getHighestScore())
                 .latestInterviewAt(statistics.getLatestInterviewAt())
@@ -95,13 +96,23 @@ public class DashboardServiceImpl implements DashboardService {
                 .map(this::toDifficultyStatisticsResponse)
                 .toList();
 
-        boolean performanceAnalysisAvailable = !categoryStatistics.isEmpty() || !difficultyStatistics.isEmpty();
+        boolean performanceAnalysisAvailable = categoryStatistics.stream()
+                .anyMatch(statistics -> statistics.getEvaluationCount() > 0)
+                || difficultyStatistics.stream().anyMatch(statistics -> statistics.getEvaluationCount() > 0);
 
         return DashboardWeaknessResponse.builder()
                 .performanceAnalysisAvailable(performanceAnalysisAvailable)
                 .unavailableReason(performanceAnalysisAvailable ? null : PERFORMANCE_ANALYSIS_UNAVAILABLE_REASON)
-                .weakestCategory(categoryStatistics.isEmpty() ? null : categoryStatistics.get(0).getCategory())
-                .weakestDifficulty(difficultyStatistics.isEmpty() ? null : difficultyStatistics.get(0).getDifficulty())
+                .weakestCategory(categoryStatistics.stream()
+                        .filter(statistics -> statistics.getEvaluationCount() > 0)
+                        .map(DashboardCategoryStatisticsResponse::getCategory)
+                        .findFirst()
+                        .orElse(null))
+                .weakestDifficulty(difficultyStatistics.stream()
+                        .filter(statistics -> statistics.getEvaluationCount() > 0)
+                        .map(DashboardDifficultyStatisticsResponse::getDifficulty)
+                        .findFirst()
+                        .orElse(null))
                 .categoryStatistics(categoryStatistics)
                 .difficultyStatistics(difficultyStatistics)
                 .build();
@@ -112,7 +123,7 @@ public class DashboardServiceImpl implements DashboardService {
         return DashboardCategoryStatisticsResponse.builder()
                 .category(projection.getCategory())
                 .interviewCount(projection.getInterviewCount())
-                .questionCount(projection.getEvaluationCount())
+                .questionCount(projection.getQuestionCount())
                 .evaluationCount(projection.getEvaluationCount())
                 .averageScore(projection.getAverageScore())
                 .build();
@@ -123,7 +134,7 @@ public class DashboardServiceImpl implements DashboardService {
         return DashboardDifficultyStatisticsResponse.builder()
                 .difficulty(projection.getDifficulty())
                 .interviewCount(projection.getInterviewCount())
-                .questionCount(projection.getEvaluationCount())
+                .questionCount(projection.getQuestionCount())
                 .evaluationCount(projection.getEvaluationCount())
                 .averageScore(projection.getAverageScore())
                 .build();

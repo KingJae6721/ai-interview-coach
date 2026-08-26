@@ -404,7 +404,7 @@ Only the owner can start an interview in `READY`. Questions are already generate
 
 ## 내 면접 목록
 
-### GET /interviews
+### GET /api/v1/interviews
 
 로그인 사용자의 면접 이력을 `createdAt` 내림차순으로 페이징 조회한다.
 
@@ -429,10 +429,14 @@ Only the owner can start an interview in `READY`. Questions are already generate
         "title": "Backend Interview",
         "status": "COMPLETED",
         "createdAt": "2026-08-06T10:00:00",
+        "startedAt": "2026-08-06T10:05:00",
         "completedAt": "2026-08-06T10:30:00",
+        "cancelledAt": null,
         "companyName": "AI Interview",
         "positionName": "Backend Developer",
-        "overallScore": 85
+        "overallScore": 85,
+        "feedbackExists": true,
+        "partial": false
       }
     ],
     "totalElements": 1,
@@ -603,6 +607,25 @@ The authenticated interview owner can generate at most one follow-up question fr
 
 ---
 
+# Interview Cancel API
+
+### POST /api/v1/interviews/{interviewId}/cancel
+
+Only the authenticated owner can cancel an `IN_PROGRESS` interview. A cancelled interview stores
+`cancelledAt`; it does not set `completedAt` and cannot be started, completed, or cancelled again.
+
+### Response
+
+```json
+{
+  "interviewId": 10,
+  "status": "CANCELLED",
+  "cancelledAt": "2026-08-18T16:00:00"
+}
+```
+
+---
+
 # Feedback API
 
 ## 피드백 조회
@@ -637,7 +660,9 @@ The authenticated interview owner can generate at most one follow-up question fr
 
 ### POST /interviews/{interviewId}/feedback
 
-Completed interview owners can generate one aggregate AI feedback result.
+Completed interview owners can generate one aggregate AI feedback result. A cancelled interview can generate
+one partial feedback result only when it has at least two answers; unanswered questions are not sent to AI.
+Partial feedback has `partial: true` and does not expose an `overallScore`.
 
 ### Success Response
 
@@ -650,6 +675,9 @@ Completed interview owners can generate one aggregate AI feedback result.
     "feedbackId": 1,
     "interviewId": 10,
     "overallScore": 85,
+    "partial": false,
+    "answeredCount": 5,
+    "totalQuestionCount": 5,
     "strengths": "...",
     "weaknesses": "...",
     "improvementSuggestions": "...",
@@ -794,7 +822,7 @@ Only the completed interview owner can retrieve the questions, submitted answers
 
 ## 면접 통계 요약
 
-### GET /dashboard/summary
+### GET /api/v1/dashboard/summary
 
 로그인 사용자의 전체 면접 통계와 최근 5건의 면접 요약을 조회한다. Feedback이 없는 면접은 점수 통계에서 제외한다.
 
@@ -808,6 +836,7 @@ Only the completed interview owner can retrieve the questions, submitted answers
   "data": {
     "totalInterviews": 15,
     "completedInterviews": 8,
+    "cancelledInterviews": 2,
     "averageScore": 82.5,
     "highestScore": 95,
     "latestInterviewAt": "2026-08-13T10:00:00",
@@ -818,9 +847,12 @@ Only the completed interview owner can retrieve the questions, submitted answers
         "status": "COMPLETED",
         "createdAt": "2026-08-13T10:00:00",
         "completedAt": "2026-08-13T10:30:00",
+        "cancelledAt": null,
         "companyName": "AI Interview",
         "positionName": "Backend Developer",
-        "overallScore": 85
+        "overallScore": 85,
+        "feedbackExists": true,
+        "partial": false
       }
     ]
   }

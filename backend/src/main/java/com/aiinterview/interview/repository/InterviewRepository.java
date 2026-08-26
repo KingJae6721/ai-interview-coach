@@ -25,7 +25,12 @@ public interface InterviewRepository extends JpaRepository<Interview, Long> {
             + "count(interview), "
             + "coalesce(sum(case when interview.status = com.aiinterview.interview.entity.InterviewStatus.COMPLETED "
             + "then 1 else 0 end), 0), "
-            + "avg(feedback.overallScore), max(feedback.overallScore), max(interview.createdAt)) "
+            + "coalesce(sum(case when interview.status = com.aiinterview.interview.entity.InterviewStatus.CANCELLED "
+            + "then 1 else 0 end), 0), "
+            + "avg(case when interview.status = com.aiinterview.interview.entity.InterviewStatus.COMPLETED "
+            + "then feedback.overallScore else null end), "
+            + "max(case when interview.status = com.aiinterview.interview.entity.InterviewStatus.COMPLETED "
+            + "then feedback.overallScore else null end), max(interview.createdAt)) "
             + "from Interview interview "
             + "left join Feedback feedback on feedback.interview = interview "
             + "where interview.user.id = :userId")
@@ -33,7 +38,8 @@ public interface InterviewRepository extends JpaRepository<Interview, Long> {
 
     @Query("select new com.aiinterview.dashboard.dto.DashboardRecentInterviewResponse("
             + "interview.id, interview.title, interview.status, interview.createdAt, interview.completedAt, "
-            + "company.name, jobPosition.name, feedback.overallScore) "
+            + "interview.cancelledAt, company.name, jobPosition.name, feedback.overallScore, "
+            + "case when feedback.id is not null then true else false end, coalesce(feedback.partial, false)) "
             + "from Interview interview "
             + "left join interview.jobPosition jobPosition "
             + "left join jobPosition.company company "
@@ -64,29 +70,31 @@ public interface InterviewRepository extends JpaRepository<Interview, Long> {
             Long userId, String dateTruncUnit, Pageable pageable);
 
     @Query("select new com.aiinterview.dashboard.dto.DashboardCategoryStatisticsProjection("
-            + "question.category, count(distinct interview), count(evaluation), avg(evaluation.score)) "
-            + "from QuestionEvaluation evaluation "
-            + "join evaluation.answer answer "
-            + "join answer.interviewQuestion question "
+            + "question.category, count(distinct interview), count(question), count(evaluation), avg(evaluation.score)) "
+            + "from InterviewQuestion question "
             + "join question.interview interview "
+            + "left join InterviewAnswer answer on answer.interviewQuestion = question "
+            + "left join QuestionEvaluation evaluation on evaluation.answer = answer "
             + "where interview.user.id = :userId "
             + "and interview.status = com.aiinterview.interview.entity.InterviewStatus.COMPLETED "
             + "and question.category is not null "
             + "group by question.category "
-            + "order by avg(evaluation.score) asc, count(evaluation) desc, question.category asc")
+            + "order by case when count(evaluation) = 0 then 1 else 0 end asc, "
+            + "avg(evaluation.score) asc, count(evaluation) desc, question.category asc")
     List<DashboardCategoryStatisticsProjection> findCategoryStatisticsByUserId(Long userId);
 
     @Query("select new com.aiinterview.dashboard.dto.DashboardDifficultyStatisticsProjection("
-            + "question.difficulty, count(distinct interview), count(evaluation), avg(evaluation.score)) "
-            + "from QuestionEvaluation evaluation "
-            + "join evaluation.answer answer "
-            + "join answer.interviewQuestion question "
+            + "question.difficulty, count(distinct interview), count(question), count(evaluation), avg(evaluation.score)) "
+            + "from InterviewQuestion question "
             + "join question.interview interview "
+            + "left join InterviewAnswer answer on answer.interviewQuestion = question "
+            + "left join QuestionEvaluation evaluation on evaluation.answer = answer "
             + "where interview.user.id = :userId "
             + "and interview.status = com.aiinterview.interview.entity.InterviewStatus.COMPLETED "
             + "and question.difficulty is not null "
             + "group by question.difficulty "
-            + "order by avg(evaluation.score) asc, count(evaluation) desc, question.difficulty asc")
+            + "order by case when count(evaluation) = 0 then 1 else 0 end asc, "
+            + "avg(evaluation.score) asc, count(evaluation) desc, question.difficulty asc")
     List<DashboardDifficultyStatisticsProjection> findDifficultyStatisticsByUserId(Long userId);
 
     @Query("select interview from Interview interview join fetch interview.user where interview.id = :interviewId")
