@@ -4,6 +4,7 @@ import com.aiinterview.ai.dto.InterviewQuestionDistribution;
 import com.aiinterview.interview.entity.Interview;
 import com.aiinterview.interview.entity.InterviewQuestionCategory;
 import com.aiinterview.interview.entity.InterviewQuestionDifficulty;
+import com.aiinterview.jobposting.entity.JobPostingAnalysis;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -16,8 +17,14 @@ public final class InterviewQuestionDistributionPolicy {
     }
 
     public static List<InterviewQuestionDistribution> create(Interview interview, int questionCount) {
+        return create(interview, null, questionCount);
+    }
+
+    public static List<InterviewQuestionDistribution> create(Interview interview,
+                                                              JobPostingAnalysis jobPostingAnalysis,
+                                                              int questionCount) {
         List<InterviewQuestionDifficulty> difficulties = createDifficulties(questionCount);
-        List<InterviewQuestionCategory> categories = createCategories(interview, questionCount);
+        List<InterviewQuestionCategory> categories = createCategories(interview, jobPostingAnalysis, questionCount);
 
         List<InterviewQuestionDistribution> distributions = new ArrayList<>(questionCount);
         for (int index = 0; index < questionCount; index++) {
@@ -50,9 +57,15 @@ public final class InterviewQuestionDistributionPolicy {
         return difficulties;
     }
 
-    private static List<InterviewQuestionCategory> createCategories(Interview interview, int questionCount) {
-        boolean hasTechStack = interview.getJobPosition().getTechStack() != null
+    private static List<InterviewQuestionCategory> createCategories(Interview interview,
+                                                                     JobPostingAnalysis jobPostingAnalysis,
+                                                                     int questionCount) {
+        boolean hasJobPositionTechStack = interview.getJobPosition().getTechStack() != null
                 && !interview.getJobPosition().getTechStack().isEmpty();
+        boolean hasJobPostingTechStack = jobPostingAnalysis != null
+                && jobPostingAnalysis.getTechStack() != null
+                && !jobPostingAnalysis.getTechStack().isEmpty();
+        boolean hasTechStack = hasJobPositionTechStack || hasJobPostingTechStack;
         boolean hasInterviewCriteria = interview.getJobPosition().getInterviewCriteria() != null
                 && !interview.getJobPosition().getInterviewCriteria().isBlank();
 

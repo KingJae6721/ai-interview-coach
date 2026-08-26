@@ -13,6 +13,8 @@ public class InterviewCreateRequest {
     @NotNull
     private Long jobPositionId;
 
+    private Long jobPostingId;
+
     @NotBlank
     @Size(max = 100)
     private String title;

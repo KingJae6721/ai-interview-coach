@@ -31,6 +31,10 @@ import com.aiinterview.interview.repository.InterviewQuestionRepository;
 import com.aiinterview.interview.repository.InterviewRepository;
 import com.aiinterview.jobposition.entity.JobPosition;
 import com.aiinterview.jobposition.repository.JobPositionRepository;
+import com.aiinterview.jobposting.entity.JobPosting;
+import com.aiinterview.jobposting.entity.JobPostingAnalysis;
+import com.aiinterview.jobposting.repository.JobPostingAnalysisRepository;
+import com.aiinterview.jobposting.repository.JobPostingRepository;
 import com.aiinterview.user.entity.User;
 import com.aiinterview.user.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
@@ -58,6 +62,8 @@ public class InterviewServiceImpl implements InterviewService {
     private final FeedbackRepository feedbackRepository;
     private final UserRepository userRepository;
     private final JobPositionRepository jobPositionRepository;
+    private final JobPostingRepository jobPostingRepository;
+    private final JobPostingAnalysisRepository jobPostingAnalysisRepository;
     private final AiService aiService;
     private final InterviewCreationPersistenceService interviewCreationPersistenceService;
     private final InterviewFollowUpQuestionPersistenceService interviewFollowUpQuestionPersistenceService;
@@ -71,19 +77,43 @@ public class InterviewServiceImpl implements InterviewService {
 
         JobPosition jobPosition = jobPositionRepository.findWithCompanyById(request.getJobPositionId())
                 .orElseThrow(() -> new BusinessException(ErrorCode.JOB_POSITION_NOT_FOUND));
+        JobPostingAnalysis jobPostingAnalysis = resolveJobPostingAnalysis(
+                request.getJobPostingId(), jobPosition.getId());
+        JobPosting jobPosting = jobPostingAnalysis == null ? null : jobPostingAnalysis.getJobPosting();
 
         Interview interview = Interview.builder()
                 .jobPosition(jobPosition)
+                .jobPosting(jobPosting)
                 .title(request.getTitle())
                 .status(InterviewStatus.READY)
                 .build();
 
         List<InterviewQuestionDistribution> distributions = InterviewQuestionDistributionPolicy.create(
-                interview, InterviewQuestionDistributionPolicy.DEFAULT_QUESTION_COUNT);
+                interview, jobPostingAnalysis, InterviewQuestionDistributionPolicy.DEFAULT_QUESTION_COUNT);
         List<String> generatedQuestions = aiService.generateInterviewQuestions(
-                InterviewQuestionPromptBuilder.buildUserPrompt(interview, distributions));
-        return interviewCreationPersistenceService.save(userId, jobPosition.getId(), request.getTitle(),
-                generatedQuestions, distributions);
+                InterviewQuestionPromptBuilder.buildUserPrompt(interview, jobPostingAnalysis, distributions));
+        return interviewCreationPersistenceService.save(userId, jobPosition.getId(), request.getJobPostingId(),
+                request.getTitle(), generatedQuestions, distributions);
+    }
+
+    private JobPostingAnalysis resolveJobPostingAnalysis(Long jobPostingId, Long jobPositionId) {
+        if (jobPostingId == null) {
+            return null;
+        }
+
+        JobPostingAnalysis analysis = jobPostingAnalysisRepository
+                .findWithJobPostingAndJobPositionAndCompanyByJobPostingId(jobPostingId)
+                .orElseGet(() -> {
+                    if (!jobPostingRepository.existsById(jobPostingId)) {
+                        throw new BusinessException(ErrorCode.JOB_POSTING_NOT_FOUND);
+                    }
+                    throw new BusinessException(ErrorCode.JOB_POSTING_NOT_ANALYZED);
+                });
+
+        if (!analysis.getJobPosting().getJobPosition().getId().equals(jobPositionId)) {
+            throw new BusinessException(ErrorCode.JOB_POSTING_POSITION_MISMATCH);
+        }
+        return analysis;
     }
 
     @Override

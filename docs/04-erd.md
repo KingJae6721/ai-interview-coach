@@ -183,7 +183,7 @@ Table interviews {
 
   resume_id bigint [ref: > resumes.id]
 
-  job_posting_id bigint [ref: > job_postings.id]
+  job_posting_id bigint [ref: > job_postings.id, note: 'Optional analyzed posting snapshot used for question generation']
 
   interview_type InterviewType
 

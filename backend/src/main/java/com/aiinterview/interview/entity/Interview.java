@@ -2,6 +2,7 @@ package com.aiinterview.interview.entity;
 
 import com.aiinterview.common.entity.BaseEntity;
 import com.aiinterview.jobposition.entity.JobPosition;
+import com.aiinterview.jobposting.entity.JobPosting;
 import com.aiinterview.user.entity.User;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
@@ -39,6 +40,10 @@ public class Interview extends BaseEntity {
     @JoinColumn(name = "job_position_id")
     private JobPosition jobPosition;
 
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "job_posting_id")
+    private JobPosting jobPosting;
+
     @Column(nullable = false, length = 100)
     private String title;
 
@@ -56,9 +61,10 @@ public class Interview extends BaseEntity {
     private LocalDateTime cancelledAt;
 
     @Builder
-    private Interview(User user, JobPosition jobPosition, String title, InterviewStatus status) {
+    private Interview(User user, JobPosition jobPosition, JobPosting jobPosting, String title, InterviewStatus status) {
         this.user = user;
         this.jobPosition = jobPosition;
+        this.jobPosting = jobPosting;
         this.title = title;
         this.status = status == null ? InterviewStatus.READY : status;
     }

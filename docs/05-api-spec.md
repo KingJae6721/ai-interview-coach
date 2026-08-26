@@ -345,21 +345,25 @@ URL fetch failures return `JOB_POSTING_FETCH_FAILED`; inaccessible or empty post
 
 ## 면접 생성
 
-### POST /interviews
+### POST /api/v1/interviews
 
 ### Request
 
 ```json
 {
   "jobPositionId": 1,
+  "jobPostingId": 10,
   "title": "Backend Interview"
 }
 ```
 
+`jobPostingId` is optional. When omitted, the existing JobPosition-only question generation flow is used. When
+provided, the posting must belong to `jobPositionId` and have a saved analysis.
+
 ### Process
 
 ```
-Company + JobPosition
+Company + JobPosition + optional JobPostingAnalysis snapshot
 
 Question distribution policy (difficulty and category)
 
@@ -369,7 +373,7 @@ Prompt 생성
 
 ↓
 
-OpenAI
+Configured AI Provider
 
 ↓
 
@@ -407,6 +411,14 @@ Only the owner can start an interview in `READY`. Questions are already generate
   "startedAt":"2026-08-18T15:00:00"
 }
 ```
+
+### JobPosting validation errors
+
+| Status | Code | Description |
+|---|---|---|
+| 404 | `JOB_POSTING_NOT_FOUND` | The requested JobPosting does not exist. |
+| 409 | `JOB_POSTING_NOT_ANALYZED` | The JobPosting does not have a saved analysis. |
+| 409 | `JOB_POSTING_POSITION_MISMATCH` | The JobPosting belongs to another JobPosition. |
 
 ---
 
