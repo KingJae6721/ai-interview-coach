@@ -105,6 +105,28 @@ class OpenAiServiceImplTest {
     }
 
     @Test
+    void analyzeResume_parsesStructuredResponse() {
+        given(aiProvider.complete(any())).willReturn("""
+                {"choices":[{"message":{"content":"{\\"summary\\":\\"Backend engineer\\",\\"skills\\":[\\"Java\\"],\\"workExperiences\\":[],\\"projects\\":[\\"API project\\"],\\"education\\":[],\\"certifications\\":[],\\"achievements\\":[\\"30% improvement\\"],\\"strengths\\":[\\"Problem solving\\"],\\"keywords\\":[\\"backend\\"]}"}}]}
+                """);
+
+        assertThat(aiService.analyzeResume("resume text")).satisfies(result -> {
+            assertThat(result.getSkills()).containsExactly("Java");
+            assertThat(result.getAchievements()).containsExactly("30% improvement");
+        });
+    }
+
+    @Test
+    void analyzeResume_throwsAiRequestFailedForInvalidStructuredResponse() {
+        given(aiProvider.complete(any())).willReturn("""
+                {"choices":[{"message":{"content":"{\\"summary\\":\\"Only summary\\"}"}}]}
+                """);
+
+        assertThatThrownBy(() -> aiService.analyzeResume("resume text"))
+                .isInstanceOf(BusinessException.class);
+    }
+
+    @Test
     void generateInterviewQuestions_throwsAiRequestFailedForInvalidJson() {
         given(aiProvider.complete(any())).willReturn("{" + "\"choices\":[]}");
 

@@ -181,25 +181,39 @@ Authorization: Bearer AccessToken
 
 # Resume API
 
-## 이력서 업로드
+## 이력서 PDF 업로드 및 분석
 
-### POST /resumes
+### POST /api/v1/resumes/analyze
 
 ### Request
 
 multipart/form-data
 
 ```
-file : resume.pdf
+file: resume.pdf (PDF, maximum 5MB)
 ```
 
 ### Response
 
 ```json
 {
-  "resumeId": 1,
-  "fileUrl": "...",
-  "status": "UPLOADED"
+  "success": true,
+  "code": "CREATED",
+  "data": {
+    "resumeId": 1,
+    "originalFileName": "resume.pdf",
+    "fileSize": 123456,
+    "summary": "...",
+    "skills": ["Java", "Spring Boot"],
+    "workExperiences": ["..."],
+    "projects": ["..."],
+    "education": [],
+    "certifications": [],
+    "achievements": ["Latency reduced by 30%"],
+    "strengths": ["Backend API design"],
+    "keywords": ["backend", "transactions"],
+    "analyzedAt": "2026-08-26T15:30:00"
+  }
 }
 ```
 
@@ -207,19 +221,26 @@ file : resume.pdf
 
 ## 이력서 조회
 
-### GET /resumes
+### GET /api/v1/resumes
 
 ### Response
 
 ```json
-[
-  {
-    "id":1,
-    "fileName":"resume.pdf",
-    "createdAt":"..."
-  }
-]
+{
+  "success": true,
+  "code": "SUCCESS",
+  "data": [{
+    "resumeId": 1,
+    "originalFileName": "resume.pdf",
+    "createdAt": "2026-08-26T15:30:00",
+    "summary": "...",
+    "skills": ["Java", "Spring Boot"]
+  }]
+}
 ```
+
+The original PDF binary is not persisted in the MVP. Only sanitized metadata, SHA-256, extracted text, and the AI
+analysis snapshot are stored. Scanned/image-only PDFs are not supported because OCR is outside this Sprint.
 
 ---
 

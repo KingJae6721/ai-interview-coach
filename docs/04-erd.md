@@ -161,13 +161,39 @@ Table resumes {
 
   user_id bigint [not null, ref: > users.id]
 
-  original_file_name varchar(255)
+  original_file_name varchar(255) [not null]
 
-  file_url text
+  file_size bigint [not null]
 
-  parsed_text text
+  content_type varchar(100) [not null]
+
+  file_hash varchar(64) [not null]
+
+  extracted_text text [not null]
 
   created_at timestamp
+  updated_at timestamp
+}
+
+Table resume_analyses {
+  id bigint [pk, increment]
+
+  resume_id bigint [not null, unique, ref: > resumes.id]
+
+  summary text
+  skills json [not null]
+  work_experiences json [not null]
+  projects json [not null]
+  education json [not null]
+  certifications json [not null]
+  achievements json [not null]
+  strengths json [not null]
+  keywords json [not null]
+  ai_model varchar(100) [not null]
+  analyzed_at timestamp [not null]
+
+  created_at timestamp
+  updated_at timestamp
 }
 
 // =========================

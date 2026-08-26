@@ -5,10 +5,12 @@ import com.aiinterview.ai.dto.InterviewFeedbackResult;
 import com.aiinterview.ai.dto.JobPostingAnalysisResult;
 import com.aiinterview.ai.dto.QuestionEvaluationRequest;
 import com.aiinterview.ai.dto.QuestionEvaluationResult;
+import com.aiinterview.ai.dto.ResumeAnalysisResult;
 import com.aiinterview.ai.prompt.FeedbackPromptBuilder;
 import com.aiinterview.ai.prompt.FollowUpQuestionPromptBuilder;
 import com.aiinterview.ai.prompt.JobPostingAnalysisPromptBuilder;
 import com.aiinterview.ai.prompt.QuestionEvaluationPromptBuilder;
+import com.aiinterview.ai.prompt.ResumeAnalysisPromptBuilder;
 import com.aiinterview.ai.provider.AiCompletionRequest;
 import com.aiinterview.ai.provider.AiProvider;
 import com.aiinterview.common.code.ErrorCode;
@@ -105,6 +107,18 @@ public class OpenAiServiceImpl implements AiService {
                     JobPostingAnalysisPromptBuilder.buildUserPrompt(extractedContent), jobPostingAnalysisResponseFormat()));
 
             return extractJobPostingAnalysis(responseBody);
+        } catch (JacksonException e) {
+            throw jsonDeserializationFailed(e);
+        }
+    }
+
+    @Override
+    public ResumeAnalysisResult analyzeResume(String extractedText) {
+        try {
+            String responseBody = aiProvider.complete(new AiCompletionRequest(
+                    ResumeAnalysisPromptBuilder.buildSystemPrompt(),
+                    ResumeAnalysisPromptBuilder.buildUserPrompt(extractedText), resumeAnalysisResponseFormat()));
+            return extractResumeAnalysis(responseBody);
         } catch (JacksonException e) {
             throw jsonDeserializationFailed(e);
         }
@@ -226,6 +240,35 @@ public class OpenAiServiceImpl implements AiService {
         );
     }
 
+    private Map<String, Object> resumeAnalysisResponseFormat() {
+        Map<String, Object> nullableString = Map.of("type", List.of("string", "null"));
+        Map<String, Object> stringArray = Map.of("type", "array", "items", Map.of("type", "string"));
+        return Map.of(
+                "type", "json_schema",
+                "json_schema", Map.of(
+                        "name", "resume_analysis",
+                        "strict", true,
+                        "schema", Map.of(
+                                "type", "object",
+                                "properties", Map.of(
+                                        "summary", nullableString,
+                                        "skills", stringArray,
+                                        "workExperiences", stringArray,
+                                        "projects", stringArray,
+                                        "education", stringArray,
+                                        "certifications", stringArray,
+                                        "achievements", stringArray,
+                                        "strengths", stringArray,
+                                        "keywords", stringArray
+                                ),
+                                "required", List.of("summary", "skills", "workExperiences", "projects", "education",
+                                        "certifications", "achievements", "strengths", "keywords"),
+                                "additionalProperties", false
+                        )
+                )
+        );
+    }
+
     private InterviewFeedbackResult extractFeedback(String responseBody) throws JacksonException {
         JsonNode response = objectMapper.readTree(responseBody);
         JsonNode content = response.at("/choices/0/message/content");
@@ -293,6 +336,27 @@ public class OpenAiServiceImpl implements AiService {
                 .experienceRequirements(getRequiredTextList(analysis, "experienceRequirements"))
                 .keywords(getRequiredTextList(analysis, "keywords"))
                 .summary(getNullableText(analysis, "summary"))
+                .aiModel(aiProvider.getModel())
+                .build();
+    }
+
+    private ResumeAnalysisResult extractResumeAnalysis(String responseBody) throws JacksonException {
+        JsonNode response = objectMapper.readTree(responseBody);
+        JsonNode content = response.at("/choices/0/message/content");
+        if (!content.isTextual()) {
+            throw unexpectedResponseFormat();
+        }
+        JsonNode analysis = objectMapper.readTree(removeJsonCodeFence(content.asText()));
+        return ResumeAnalysisResult.builder()
+                .summary(getNullableText(analysis, "summary"))
+                .skills(getRequiredTextList(analysis, "skills"))
+                .workExperiences(getRequiredTextList(analysis, "workExperiences"))
+                .projects(getRequiredTextList(analysis, "projects"))
+                .education(getRequiredTextList(analysis, "education"))
+                .certifications(getRequiredTextList(analysis, "certifications"))
+                .achievements(getRequiredTextList(analysis, "achievements"))
+                .strengths(getRequiredTextList(analysis, "strengths"))
+                .keywords(getRequiredTextList(analysis, "keywords"))
                 .aiModel(aiProvider.getModel())
                 .build();
     }

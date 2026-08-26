@@ -38,6 +38,12 @@ public enum ErrorCode {
     JOB_POSTING_FETCH_FAILED(HttpStatus.BAD_GATEWAY, "Job posting could not be fetched."),
     JOB_POSTING_CONTENT_NOT_FOUND(HttpStatus.UNPROCESSABLE_CONTENT, "Job posting content could not be extracted."),
 
+    // Resume
+    RESUME_INVALID_FILE(HttpStatus.BAD_REQUEST, "A valid PDF resume is required."),
+    RESUME_FILE_TOO_LARGE(HttpStatus.PAYLOAD_TOO_LARGE, "Resume file exceeds the allowed size."),
+    RESUME_TEXT_EXTRACTION_FAILED(HttpStatus.UNPROCESSABLE_CONTENT, "Resume text extraction failed."),
+    RESUME_CONTENT_NOT_FOUND(HttpStatus.UNPROCESSABLE_CONTENT, "No readable text was found in the resume."),
+
     // Interview
     INTERVIEW_NOT_FOUND(HttpStatus.NOT_FOUND, "면접을 찾을 수 없습니다."),
     INTERVIEW_ALREADY_STARTED(HttpStatus.CONFLICT, "이미 시작된 면접입니다."),

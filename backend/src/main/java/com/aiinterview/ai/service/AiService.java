@@ -5,6 +5,7 @@ import com.aiinterview.ai.dto.InterviewFeedbackResult;
 import com.aiinterview.ai.dto.JobPostingAnalysisResult;
 import com.aiinterview.ai.dto.QuestionEvaluationRequest;
 import com.aiinterview.ai.dto.QuestionEvaluationResult;
+import com.aiinterview.ai.dto.ResumeAnalysisResult;
 
 import java.util.List;
 import java.util.Optional;
@@ -20,4 +21,6 @@ public interface AiService {
     QuestionEvaluationResult evaluateQuestionAnswer(QuestionEvaluationRequest request);
 
     JobPostingAnalysisResult analyzeJobPosting(String extractedContent);
+
+    ResumeAnalysisResult analyzeResume(String extractedText);
 }
