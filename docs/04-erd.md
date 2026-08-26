@@ -105,23 +105,51 @@ Table job_positions {
 Table job_postings {
   id bigint [pk, increment]
 
-  company_id bigint [not null, ref: > companies.id]
+  job_position_id bigint [not null, ref: > job_positions.id]
 
   title varchar(255)
 
-  position varchar(100)
+  posting_url text [not null]
 
-  url text
+  extracted_content text [not null]
 
-  description text
+  created_at timestamp
+  updated_at timestamp
+}
 
-  requirements text
+// =========================
+// JOB POSTING ANALYSIS
+// =========================
 
-  preferred_qualifications text
+Table job_posting_analyses {
+  id bigint [pk, increment]
+
+  job_posting_id bigint [not null, unique, ref: > job_postings.id]
+
+  company_name varchar(100)
+
+  position_name varchar(100)
+
+  responsibilities json
+
+  required_qualifications json
+
+  preferred_qualifications json
 
   tech_stack json
 
+  experience_requirements json
+
+  keywords json
+
+  summary text
+
+  ai_model varchar(100)
+
+  analyzed_at timestamp [not null]
+
   created_at timestamp
+  updated_at timestamp
 }
 
 // =========================

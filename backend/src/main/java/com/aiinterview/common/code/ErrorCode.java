@@ -30,6 +30,11 @@ public enum ErrorCode {
     // Job Position
     JOB_POSITION_NOT_FOUND(HttpStatus.NOT_FOUND, "Job position not found."),
 
+    // Job Posting
+    JOB_POSTING_URL_NOT_ALLOWED(HttpStatus.BAD_REQUEST, "Job posting URL is not allowed."),
+    JOB_POSTING_FETCH_FAILED(HttpStatus.BAD_GATEWAY, "Job posting could not be fetched."),
+    JOB_POSTING_CONTENT_NOT_FOUND(HttpStatus.UNPROCESSABLE_CONTENT, "Job posting content could not be extracted."),
+
     // Interview
     INTERVIEW_NOT_FOUND(HttpStatus.NOT_FOUND, "면접을 찾을 수 없습니다."),
     INTERVIEW_ALREADY_STARTED(HttpStatus.CONFLICT, "이미 시작된 면접입니다."),

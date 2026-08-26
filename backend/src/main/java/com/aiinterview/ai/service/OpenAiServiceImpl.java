@@ -2,10 +2,12 @@ package com.aiinterview.ai.service;
 
 import com.aiinterview.ai.dto.InterviewFeedbackRequest;
 import com.aiinterview.ai.dto.InterviewFeedbackResult;
+import com.aiinterview.ai.dto.JobPostingAnalysisResult;
 import com.aiinterview.ai.dto.QuestionEvaluationRequest;
 import com.aiinterview.ai.dto.QuestionEvaluationResult;
 import com.aiinterview.ai.prompt.FeedbackPromptBuilder;
 import com.aiinterview.ai.prompt.FollowUpQuestionPromptBuilder;
+import com.aiinterview.ai.prompt.JobPostingAnalysisPromptBuilder;
 import com.aiinterview.ai.prompt.QuestionEvaluationPromptBuilder;
 import com.aiinterview.ai.provider.AiCompletionRequest;
 import com.aiinterview.ai.provider.AiProvider;
@@ -95,6 +97,19 @@ public class OpenAiServiceImpl implements AiService {
         }
     }
 
+    @Override
+    public JobPostingAnalysisResult analyzeJobPosting(String extractedContent) {
+        try {
+            String responseBody = aiProvider.complete(new AiCompletionRequest(
+                    JobPostingAnalysisPromptBuilder.buildSystemPrompt(),
+                    JobPostingAnalysisPromptBuilder.buildUserPrompt(extractedContent), jobPostingAnalysisResponseFormat()));
+
+            return extractJobPostingAnalysis(responseBody);
+        } catch (JacksonException e) {
+            throw jsonDeserializationFailed(e);
+        }
+    }
+
     private List<String> extractQuestions(String responseBody) throws JacksonException {
         JsonNode response = objectMapper.readTree(responseBody);
         JsonNode content = response.at("/choices/0/message/content");
@@ -179,6 +194,38 @@ public class OpenAiServiceImpl implements AiService {
         );
     }
 
+    private Map<String, Object> jobPostingAnalysisResponseFormat() {
+        Map<String, Object> nullableString = Map.of("type", List.of("string", "null"));
+        Map<String, Object> stringArray = Map.of("type", "array", "items", Map.of("type", "string"));
+
+        return Map.of(
+                "type", "json_schema",
+                "json_schema", Map.of(
+                        "name", "job_posting_analysis",
+                        "strict", true,
+                        "schema", Map.of(
+                                "type", "object",
+                                "properties", Map.of(
+                                        "companyName", nullableString,
+                                        "positionName", nullableString,
+                                        "responsibilities", stringArray,
+                                        "requiredQualifications", stringArray,
+                                        "preferredQualifications", stringArray,
+                                        "techStack", stringArray,
+                                        "experienceRequirements", stringArray,
+                                        "keywords", stringArray,
+                                        "summary", nullableString
+                                ),
+                                "required", List.of(
+                                        "companyName", "positionName", "responsibilities", "requiredQualifications",
+                                        "preferredQualifications", "techStack", "experienceRequirements", "keywords", "summary"
+                                ),
+                                "additionalProperties", false
+                        )
+                )
+        );
+    }
+
     private InterviewFeedbackResult extractFeedback(String responseBody) throws JacksonException {
         JsonNode response = objectMapper.readTree(responseBody);
         JsonNode content = response.at("/choices/0/message/content");
@@ -228,12 +275,60 @@ public class OpenAiServiceImpl implements AiService {
                 .build();
     }
 
+    private JobPostingAnalysisResult extractJobPostingAnalysis(String responseBody) throws JacksonException {
+        JsonNode response = objectMapper.readTree(responseBody);
+        JsonNode content = response.at("/choices/0/message/content");
+        if (!content.isTextual()) {
+            throw unexpectedResponseFormat();
+        }
+
+        JsonNode analysis = objectMapper.readTree(removeJsonCodeFence(content.asText()));
+        return JobPostingAnalysisResult.builder()
+                .companyName(getNullableText(analysis, "companyName"))
+                .positionName(getNullableText(analysis, "positionName"))
+                .responsibilities(getRequiredTextList(analysis, "responsibilities"))
+                .requiredQualifications(getRequiredTextList(analysis, "requiredQualifications"))
+                .preferredQualifications(getRequiredTextList(analysis, "preferredQualifications"))
+                .techStack(getRequiredTextList(analysis, "techStack"))
+                .experienceRequirements(getRequiredTextList(analysis, "experienceRequirements"))
+                .keywords(getRequiredTextList(analysis, "keywords"))
+                .summary(getNullableText(analysis, "summary"))
+                .aiModel(aiProvider.getModel())
+                .build();
+    }
+
     private String getRequiredText(JsonNode feedback, String fieldName) {
         JsonNode field = feedback.get(fieldName);
         if (field == null || !field.isTextual() || !StringUtils.hasText(field.asText())) {
             throw unexpectedResponseFormat();
         }
         return field.asText();
+    }
+
+    private String getNullableText(JsonNode json, String fieldName) {
+        JsonNode field = json.get(fieldName);
+        if (field == null || field.isNull()) {
+            return null;
+        }
+        if (!field.isTextual()) {
+            throw unexpectedResponseFormat();
+        }
+        return StringUtils.hasText(field.asText()) ? field.asText() : null;
+    }
+
+    private List<String> getRequiredTextList(JsonNode json, String fieldName) {
+        JsonNode field = json.get(fieldName);
+        if (field == null || !field.isArray()) {
+            throw unexpectedResponseFormat();
+        }
+        List<String> values = new java.util.ArrayList<>();
+        for (JsonNode value : field) {
+            if (!value.isTextual() || !StringUtils.hasText(value.asText())) {
+                throw unexpectedResponseFormat();
+            }
+            values.add(value.asText());
+        }
+        return values;
     }
 
     private String removeJsonCodeFence(String content) {

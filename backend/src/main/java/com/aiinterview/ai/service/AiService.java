@@ -2,6 +2,7 @@ package com.aiinterview.ai.service;
 
 import com.aiinterview.ai.dto.InterviewFeedbackRequest;
 import com.aiinterview.ai.dto.InterviewFeedbackResult;
+import com.aiinterview.ai.dto.JobPostingAnalysisResult;
 import com.aiinterview.ai.dto.QuestionEvaluationRequest;
 import com.aiinterview.ai.dto.QuestionEvaluationResult;
 
@@ -17,4 +18,6 @@ public interface AiService {
     InterviewFeedbackResult generateInterviewFeedback(InterviewFeedbackRequest request);
 
     QuestionEvaluationResult evaluateQuestionAnswer(QuestionEvaluationRequest request);
+
+    JobPostingAnalysisResult analyzeJobPosting(String extractedContent);
 }

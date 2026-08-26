@@ -270,52 +270,74 @@ JobPosition이 없으면 `data`는 빈 배열을 반환한다.
 
 # Job Posting API
 
-## 채용공고 등록
+## 채용공고 URL 분석
 
-### POST /job-postings
+### POST /api/v1/job-postings/analyze
 
 ### Request
 
 ```json
 {
-  "companyId":1,
-  "url":"https://..."
+  "jobPositionId": 1,
+  "postingUrl": "https://careers.example.com/jobs/backend-developer"
 }
 ```
 
 ### Process
 
 ```
-URL 입력
+URL validation (http/https only, localhost/private network blocked)
 
 ↓
 
-본문 수집
+Fetch with redirect validation, timeout, and response-size limit
 
 ↓
 
-AI 분석
+HTML main content extraction
 
 ↓
 
-DB 저장
+AI structured analysis
+
+↓
+
+JobPosting + JobPostingAnalysis snapshot persistence
 ```
 
 ### Response
 
 ```json
 {
-  "jobPostingId":1,
-  "company":"네이버",
-  "position":"Backend"
+  "success": true,
+  "code": "CREATED",
+  "message": "...",
+  "data": {
+    "jobPostingId": 1,
+    "jobPositionId": 1,
+    "postingUrl": "https://careers.example.com/jobs/backend-developer",
+    "title": "Backend Developer",
+    "companyName": "Example Corp",
+    "positionName": "Backend Developer",
+    "responsibilities": ["..."],
+    "requiredQualifications": ["..."],
+    "preferredQualifications": [],
+    "techStack": ["Java", "Spring Boot"],
+    "experienceRequirements": [],
+    "keywords": ["backend"],
+    "summary": "...",
+    "analyzedAt": "2026-08-26T15:00:00"
+  }
 }
 ```
 
 ---
 
-## 채용공고 조회
+Each request creates a new immutable snapshot because the source posting can change. A selected JobPosition is never
+automatically changed from AI-extracted company or position information.
 
-### GET /job-postings/{id}
+URL fetch failures return `JOB_POSTING_FETCH_FAILED`; inaccessible or empty posting content returns
+`JOB_POSTING_CONTENT_NOT_FOUND`; disallowed URLs return `JOB_POSTING_URL_NOT_ALLOWED`.
 
 ---
 
@@ -940,9 +962,12 @@ Only the completed interview owner can retrieve the questions, submitted answers
 
 ## 카테고리·난이도 약점 분석
 
-### GET /dashboard/weaknesses
+### GET /api/v1/dashboard/weaknesses
 
-완료 면접에 속하고 QuestionEvaluation이 존재하는 답변만 카테고리·난이도별로 집계한다. 가장 낮은 평균 점수를 약점으로 선택하며, 동점이면 평가 수가 많은 항목, 그마저 동점이면 enum 이름 오름차순을 적용한다.
+완료 면접의 전체 질문을 카테고리·난이도별로 집계한다. `questionCount`는 해당 그룹의 전체 질문 수이고,
+`evaluationCount`는 QuestionEvaluation이 존재하는 질문 수이다. 평가가 없는 질문도 표본 수에는 포함되지만,
+`evaluationCount`가 0인 그룹은 평균 점수와 실제 약점 판단에서 제외한다. 가장 낮은 평균 점수를 약점으로 선택하며,
+동점이면 평가 수가 많은 항목, 그마저 동점이면 enum 이름 오름차순을 적용한다.
 
 ### Response
 
@@ -960,7 +985,7 @@ Only the completed interview owner can retrieve the questions, submitted answers
       {
         "category": "TECH_STACK",
         "interviewCount": 3,
-        "questionCount": 6,
+        "questionCount": 8,
         "evaluationCount": 6,
         "averageScore": 72.5
       }
@@ -969,7 +994,7 @@ Only the completed interview owner can retrieve the questions, submitted answers
       {
         "difficulty": "MEDIUM",
         "interviewCount": 3,
-        "questionCount": 9,
+        "questionCount": 11,
         "evaluationCount": 9,
         "averageScore": 75.0
       }

@@ -82,6 +82,29 @@ class OpenAiServiceImplTest {
     }
 
     @Test
+    void analyzeJobPosting_parsesStructuredResponse() {
+        given(aiProvider.complete(any())).willReturn("""
+                {"choices":[{"message":{"content":"```json\\n{\\"companyName\\":\\"Example Corp\\",\\"positionName\\":\\"Backend Developer\\",\\"responsibilities\\":[\\"Build APIs\\"],\\"requiredQualifications\\":[\\"Java\\"],\\"preferredQualifications\\":[],\\"techStack\\":[\\"Spring Boot\\"],\\"experienceRequirements\\":[],\\"keywords\\":[\\"backend\\"],\\"summary\\":\\"Backend role\\"}\\n```"}}]}
+                """);
+
+        assertThat(aiService.analyzeJobPosting("posting content"))
+                .satisfies(result -> {
+                    assertThat(result.getCompanyName()).isEqualTo("Example Corp");
+                    assertThat(result.getTechStack()).containsExactly("Spring Boot");
+                });
+    }
+
+    @Test
+    void analyzeJobPosting_throwsAiRequestFailedForInvalidStructuredResponse() {
+        given(aiProvider.complete(any())).willReturn("""
+                {"choices":[{"message":{"content":"{\\"companyName\\":\\"Example Corp\\"}"}}]}
+                """);
+
+        assertThatThrownBy(() -> aiService.analyzeJobPosting("posting content"))
+                .isInstanceOf(BusinessException.class);
+    }
+
+    @Test
     void generateInterviewQuestions_throwsAiRequestFailedForInvalidJson() {
         given(aiProvider.complete(any())).willReturn("{" + "\"choices\":[]}");
 
