@@ -5,15 +5,10 @@ import { InterviewProgress } from "@/features/interview/components/interview-pro
 
 interface InterviewPageProps {
   params: Promise<{ interviewId: string }>;
-  searchParams: Promise<{ start?: string | string[] }>;
 }
 
-export default async function InterviewPage({
-  params,
-  searchParams,
-}: InterviewPageProps) {
+export default async function InterviewPage({ params }: InterviewPageProps) {
   const { interviewId: interviewIdParam } = await params;
-  const { start } = await searchParams;
   const interviewId = Number(interviewIdParam);
 
   if (!Number.isSafeInteger(interviewId) || interviewId <= 0) {
@@ -24,10 +19,7 @@ export default async function InterviewPage({
     <ProtectedRoute>
       <main className="min-h-screen bg-zinc-50 px-5 py-8 sm:px-6 sm:py-10">
         <div className="mx-auto max-w-3xl">
-          <InterviewProgress
-            interviewId={interviewId}
-            initialReady={start === "ready"}
-          />
+          <InterviewProgress interviewId={interviewId} />
         </div>
       </main>
     </ProtectedRoute>

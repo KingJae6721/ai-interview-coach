@@ -3,7 +3,8 @@ export interface InterviewCreateRequest {
   title: string;
 }
 
-export type InterviewStatus = "READY" | "IN_PROGRESS" | "COMPLETED" | "FAILED";
+export type InterviewStatus =
+  "READY" | "IN_PROGRESS" | "COMPLETED" | "CANCELLED";
 
 export interface InterviewCreateResponse {
   interviewId: number;
@@ -16,6 +17,19 @@ export interface InterviewStartResponse {
   interviewId: number;
   status: "IN_PROGRESS";
   startedAt: string;
+}
+
+export interface InterviewStateResponse {
+  interviewId: number;
+  title: string;
+  status: InterviewStatus;
+  createdAt: string;
+  startedAt: string | null;
+  completedAt: string | null;
+  cancelledAt: string | null;
+  jobPositionId: number | null;
+  positionName: string | null;
+  companyName: string | null;
 }
 
 export interface JobPositionResponse {
@@ -75,10 +89,19 @@ export interface InterviewCompleteResponse {
   completedAt: string;
 }
 
+export interface InterviewCancelResponse {
+  interviewId: number;
+  status: "CANCELLED";
+  cancelledAt: string;
+}
+
 export interface FeedbackGenerateResponse {
   feedbackId: number;
   interviewId: number;
-  overallScore: number;
+  overallScore: number | null;
+  partial: boolean;
+  answeredCount: number;
+  totalQuestionCount: number;
   strengths: string;
   weaknesses: string;
   improvementSuggestions: string;
@@ -86,7 +109,10 @@ export interface FeedbackGenerateResponse {
 }
 
 export interface InterviewResultFeedbackResponse {
-  overallScore: number;
+  overallScore: number | null;
+  partial: boolean;
+  answeredCount: number;
+  totalQuestionCount: number;
   strengths: string;
   weaknesses: string;
   improvementSuggestions: string;
@@ -94,16 +120,61 @@ export interface InterviewResultFeedbackResponse {
 }
 
 export interface InterviewResultQuestionAnswerResponse {
+  questionId: number;
+  parentQuestionId: number | null;
   questionOrder: number;
   questionContent: string;
-  answerContent: string;
-  answeredAt: string;
+  category: QuestionCategory | null;
+  difficulty: QuestionDifficulty | null;
+  followUp: boolean;
+  answerContent: string | null;
+  answeredAt: string | null;
+  evaluation: InterviewResultQuestionEvaluationResponse | null;
+}
+
+export interface InterviewResultQuestionEvaluationResponse {
+  evaluationId: number;
+  score: number;
+  strengths: string;
+  weaknesses: string;
+  improvementSuggestion: string;
+  reasoning: string;
 }
 
 export interface InterviewResultResponse {
   interviewId: number;
   title: string;
-  status: "COMPLETED";
+  status: "COMPLETED" | "CANCELLED";
+  completedAt: string | null;
+  cancelledAt: string | null;
+  companyName: string | null;
+  positionName: string | null;
   questionAnswers: InterviewResultQuestionAnswerResponse[];
   feedback: InterviewResultFeedbackResponse;
+}
+
+export interface InterviewHistoryResponse {
+  interviewId: number;
+  title: string;
+  status: InterviewStatus;
+  createdAt: string;
+  startedAt: string | null;
+  completedAt: string | null;
+  cancelledAt: string | null;
+  companyName: string | null;
+  positionName: string | null;
+  overallScore: number | null;
+  feedbackExists: boolean;
+  partial: boolean;
+}
+
+export interface PageResponse<T> {
+  content: T[];
+  totalElements: number;
+  totalPages: number;
+  size: number;
+  number: number;
+  first: boolean;
+  last: boolean;
+  empty: boolean;
 }

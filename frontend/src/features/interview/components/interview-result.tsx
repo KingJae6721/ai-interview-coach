@@ -80,13 +80,19 @@ function getResultErrorMessage(error: unknown): string {
     INTERVIEW_NOT_COMPLETED: "완료된 면접만 결과를 확인할 수 있습니다.",
     FEEDBACK_GENERATION_NOT_AVAILABLE:
       "질문과 답변이 모두 준비된 면접만 분석할 수 있습니다.",
+    PARTIAL_FEEDBACK_GENERATION_NOT_AVAILABLE:
+      "부분 피드백을 생성하기에는 답변이 부족합니다. 부분 피드백은 최소 2개의 답변이 필요합니다.",
     ACCESS_DENIED: "이 면접 결과를 확인할 권한이 없습니다.",
   };
 
   return error.code ? (messages[error.code] ?? error.message) : error.message;
 }
 
-function formatAnsweredAt(value: string): string {
+function formatDateTime(value: string | null): string {
+  if (!value) {
+    return "-";
+  }
+
   const date = new Date(value);
   return Number.isNaN(date.getTime())
     ? value
@@ -100,6 +106,7 @@ export function InterviewResult({ interviewId }: InterviewResultProps) {
   const [phase, setPhase] = useState<ResultPhase>("checking");
   const [result, setResult] = useState<InterviewResultResponse | null>(null);
   const [errorMessage, setErrorMessage] = useState("");
+  const [errorCode, setErrorCode] = useState("");
   const [retryCount, setRetryCount] = useState(0);
 
   useEffect(() => {
@@ -122,6 +129,7 @@ export function InterviewResult({ interviewId }: InterviewResultProps) {
       .catch((error: unknown) => {
         if (isActive) {
           setErrorMessage(getResultErrorMessage(error));
+          setErrorCode(error instanceof ApiError ? (error.code ?? "") : "");
           setPhase("error");
         }
       });
@@ -165,17 +173,20 @@ export function InterviewResult({ interviewId }: InterviewResultProps) {
           {errorMessage}
         </p>
         <div className="mt-6 flex flex-wrap justify-center gap-3">
-          <button
-            type="button"
-            onClick={() => {
-              setErrorMessage("");
-              setPhase("checking");
-              setRetryCount((count) => count + 1);
-            }}
-            className="rounded-lg bg-zinc-900 px-5 py-2.5 text-sm font-medium text-white hover:bg-zinc-700"
-          >
-            다시 시도
-          </button>
+          {errorCode !== "PARTIAL_FEEDBACK_GENERATION_NOT_AVAILABLE" && (
+            <button
+              type="button"
+              onClick={() => {
+                setErrorMessage("");
+                setErrorCode("");
+                setPhase("checking");
+                setRetryCount((count) => count + 1);
+              }}
+              className="rounded-lg bg-zinc-900 px-5 py-2.5 text-sm font-medium text-white hover:bg-zinc-700"
+            >
+              다시 시도
+            </button>
+          )}
           <Link
             href="/dashboard"
             className="rounded-lg border border-zinc-300 px-5 py-2.5 text-sm font-medium text-zinc-700 hover:bg-zinc-50"
@@ -188,6 +199,7 @@ export function InterviewResult({ interviewId }: InterviewResultProps) {
   }
 
   const { feedback } = result;
+  const isPartial = result.status === "CANCELLED" || feedback.partial;
 
   return (
     <div className="space-y-6">
@@ -197,19 +209,48 @@ export function InterviewResult({ interviewId }: InterviewResultProps) {
             <p className="text-sm text-zinc-400">
               Interview #{result.interviewId} · {result.status}
             </p>
+            <div className="mt-3 flex flex-wrap gap-2">
+              {isPartial && (
+                <span className="rounded-full bg-amber-300 px-3 py-1 text-xs font-semibold text-amber-950">
+                  중도 종료된 면접 · 부분 피드백
+                </span>
+              )}
+              {(result.companyName || result.positionName) && (
+                <span className="rounded-full bg-white/10 px-3 py-1 text-xs text-zinc-200">
+                  {[result.companyName, result.positionName]
+                    .filter(Boolean)
+                    .join(" · ")}
+                </span>
+              )}
+            </div>
             <h1 className="mt-2 text-2xl font-semibold tracking-tight sm:text-3xl">
               {result.title}
             </h1>
             <p className="mt-4 max-w-2xl text-sm leading-6 text-zinc-300">
               {feedback.summary}
             </p>
+            {isPartial && (
+              <p className="mt-3 max-w-2xl rounded-xl bg-amber-300/15 px-4 py-3 text-sm leading-6 text-amber-100">
+                {feedback.totalQuestionCount}개 질문 중 {feedback.answeredCount}
+                개에 답변했습니다. 아래 평가는 답변한 내용만을 기준으로 생성된
+                부분 피드백입니다.
+              </p>
+            )}
+            <p className="mt-3 text-xs text-zinc-400">
+              {isPartial ? "중도 종료" : "완료"}:{" "}
+              {formatDateTime(
+                isPartial ? result.cancelledAt : result.completedAt,
+              )}
+            </p>
           </div>
-          <div className="flex size-32 shrink-0 flex-col items-center justify-center rounded-full border-4 border-white/20 bg-white/10">
-            <strong className="text-4xl font-semibold">
-              {feedback.overallScore}
-            </strong>
-            <span className="mt-1 text-xs text-zinc-300">100점 만점</span>
-          </div>
+          {feedback.overallScore !== null && (
+            <div className="flex size-32 shrink-0 flex-col items-center justify-center rounded-full border-4 border-white/20 bg-white/10">
+              <strong className="text-4xl font-semibold">
+                {feedback.overallScore}
+              </strong>
+              <span className="mt-1 text-xs text-zinc-300">100점 만점</span>
+            </div>
+          )}
         </div>
       </header>
 
@@ -238,13 +279,14 @@ export function InterviewResult({ interviewId }: InterviewResultProps) {
         <div>
           <h2 className="text-xl font-semibold text-zinc-900">질문별 복기</h2>
           <p className="mt-1 text-sm text-zinc-500">
-            총 {result.questionAnswers.length}개의 질문과 답변입니다.
+            총 {feedback.totalQuestionCount}개 질문 중 {feedback.answeredCount}
+            개에 답변했습니다.
           </p>
         </div>
         <div className="mt-5 space-y-3">
           {result.questionAnswers.map((item) => (
             <details
-              key={item.questionOrder}
+              key={item.questionId}
               className="group rounded-xl border border-zinc-200 bg-zinc-50 open:bg-white"
             >
               <summary className="flex cursor-pointer list-none items-start gap-3 px-4 py-4 sm:px-5">
@@ -252,6 +294,19 @@ export function InterviewResult({ interviewId }: InterviewResultProps) {
                   {item.questionOrder}
                 </span>
                 <span className="flex-1 text-sm leading-6 font-medium text-zinc-900 sm:text-base">
+                  <span className="mb-1 flex flex-wrap gap-1.5 text-xs font-normal">
+                    <span className="rounded-full bg-blue-100 px-2 py-0.5 text-blue-700">
+                      {item.category}
+                    </span>
+                    <span className="rounded-full bg-amber-100 px-2 py-0.5 text-amber-700">
+                      {item.difficulty}
+                    </span>
+                    {item.followUp && (
+                      <span className="rounded-full bg-violet-100 px-2 py-0.5 text-violet-700">
+                        꼬리질문
+                      </span>
+                    )}
+                  </span>
                   {item.questionContent}
                 </span>
                 <span className="text-zinc-400 transition-transform group-open:rotate-180">
@@ -260,12 +315,45 @@ export function InterviewResult({ interviewId }: InterviewResultProps) {
               </summary>
               <div className="border-t border-zinc-200 px-4 py-5 sm:px-5">
                 <p className="text-xs font-medium text-zinc-500">내 답변</p>
-                <p className="mt-2 rounded-2xl rounded-tr-md bg-zinc-900 px-4 py-3 text-sm leading-6 whitespace-pre-wrap text-white">
-                  {item.answerContent}
-                </p>
-                <time className="mt-2 block text-right text-xs text-zinc-500">
-                  {formatAnsweredAt(item.answeredAt)}
-                </time>
+                {item.answerContent ? (
+                  <>
+                    <p className="mt-2 rounded-2xl rounded-tr-md bg-zinc-900 px-4 py-3 text-sm leading-6 whitespace-pre-wrap text-white">
+                      {item.answerContent}
+                    </p>
+                    <time className="mt-2 block text-right text-xs text-zinc-500">
+                      {formatDateTime(item.answeredAt)}
+                    </time>
+                  </>
+                ) : (
+                  <p className="mt-2 rounded-xl bg-zinc-100 px-4 py-3 text-sm text-zinc-500">
+                    중도 종료되어 답변하지 않은 질문입니다.
+                  </p>
+                )}
+                {item.evaluation && (
+                  <div className="mt-5 rounded-xl border border-zinc-200 bg-white p-4 text-sm text-zinc-700">
+                    <p className="font-semibold text-zinc-900">
+                      질문별 평가 · {item.evaluation.score}점
+                    </p>
+                    <dl className="mt-3 space-y-2 leading-6">
+                      <div>
+                        <dt className="font-medium">강점</dt>
+                        <dd>{item.evaluation.strengths}</dd>
+                      </div>
+                      <div>
+                        <dt className="font-medium">약점</dt>
+                        <dd>{item.evaluation.weaknesses}</dd>
+                      </div>
+                      <div>
+                        <dt className="font-medium">개선 제안</dt>
+                        <dd>{item.evaluation.improvementSuggestion}</dd>
+                      </div>
+                      <div>
+                        <dt className="font-medium">평가 근거</dt>
+                        <dd>{item.evaluation.reasoning}</dd>
+                      </div>
+                    </dl>
+                  </div>
+                )}
               </div>
             </details>
           ))}

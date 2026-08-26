@@ -3,14 +3,18 @@ import type {
   FeedbackGenerateResponse,
   InterviewAnswerCreateRequest,
   InterviewAnswerCreateResponse,
+  InterviewCancelResponse,
   InterviewCompleteResponse,
   InterviewCreateRequest,
   InterviewCreateResponse,
   InterviewFollowUpQuestionResponse,
+  InterviewHistoryResponse,
   InterviewProgressResponse,
   InterviewResultResponse,
   InterviewStartResponse,
+  InterviewStateResponse,
   JobPositionResponse,
+  PageResponse,
 } from "@/features/interview/types/interview";
 
 export function getJobPositions(): Promise<JobPositionResponse[]> {
@@ -26,6 +30,20 @@ export function createInterview(
   });
 }
 
+export function getInterviewHistory(
+  page: number,
+  size: number,
+): Promise<PageResponse<InterviewHistoryResponse>> {
+  const searchParams = new URLSearchParams({
+    page: String(page),
+    size: String(size),
+  });
+
+  return apiFetch<PageResponse<InterviewHistoryResponse>>(
+    `/api/v1/interviews?${searchParams.toString()}`,
+  );
+}
+
 export function startInterview(
   interviewId: number,
 ): Promise<InterviewStartResponse> {
@@ -33,6 +51,12 @@ export function startInterview(
     `/api/v1/interviews/${interviewId}/start`,
     { method: "POST" },
   );
+}
+
+export function getInterviewState(
+  interviewId: number,
+): Promise<InterviewStateResponse> {
+  return apiFetch<InterviewStateResponse>(`/api/v1/interviews/${interviewId}`);
 }
 
 export function getInterviewProgress(
@@ -70,6 +94,15 @@ export function completeInterview(
 ): Promise<InterviewCompleteResponse> {
   return apiFetch<InterviewCompleteResponse>(
     `/api/v1/interviews/${interviewId}/complete`,
+    { method: "POST" },
+  );
+}
+
+export function cancelInterview(
+  interviewId: number,
+): Promise<InterviewCancelResponse> {
+  return apiFetch<InterviewCancelResponse>(
+    `/api/v1/interviews/${interviewId}/cancel`,
     { method: "POST" },
   );
 }

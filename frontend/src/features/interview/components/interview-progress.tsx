@@ -12,8 +12,11 @@ import {
 
 import { getErrorMessage } from "@/features/auth/lib/get-error-message";
 import {
+  cancelInterview,
   completeInterview,
   generateFollowUpQuestion,
+  generateInterviewFeedback,
+  getInterviewState,
   getInterviewProgress,
   startInterview,
   submitInterviewAnswer,
@@ -23,10 +26,11 @@ import { ApiError } from "@/services/api-client";
 
 interface InterviewProgressProps {
   interviewId: number;
-  initialReady: boolean;
 }
 
-type LoadState = "loading" | "ready" | "success" | "error" | "unavailable";
+type LoadState = "loading" | "ready" | "success" | "cancelled" | "error";
+
+const MINIMUM_PARTIAL_FEEDBACK_ANSWER_COUNT = 2;
 
 const CATEGORY_LABELS: Record<string, string> = {
   CS: "CS",
@@ -63,25 +67,26 @@ function getInterviewErrorMessage(error: unknown): string {
     if (error.code === "INTERVIEW_ALREADY_STARTED") {
       return "이미 시작된 면접입니다. 진행 상태를 불러옵니다.";
     }
+
+    if (error.code === "PARTIAL_FEEDBACK_GENERATION_NOT_AVAILABLE") {
+      return "부분 피드백을 생성하려면 최소 2개의 답변이 필요합니다.";
+    }
   }
 
   return getErrorMessage(error);
 }
 
-export function InterviewProgress({
-  interviewId,
-  initialReady,
-}: InterviewProgressProps) {
+export function InterviewProgress({ interviewId }: InterviewProgressProps) {
   const router = useRouter();
   const conversationRef = useRef<HTMLDivElement>(null);
   const conversationEndRef = useRef<HTMLDivElement>(null);
   const isNearBottomRef = useRef(true);
   const isStartingRef = useRef(false);
+  const isCancellingRef = useRef(false);
+  const isGeneratingPartialFeedbackRef = useRef(false);
   const hasRenderedConversationRef = useRef(false);
   const highlightTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const [loadState, setLoadState] = useState<LoadState>(
-    initialReady ? "ready" : "loading",
-  );
+  const [loadState, setLoadState] = useState<LoadState>("loading");
   const [progress, setProgress] = useState<InterviewProgressResponse | null>(
     null,
   );
@@ -97,76 +102,45 @@ export function InterviewProgress({
   const [isGeneratingFollowUp, setIsGeneratingFollowUp] = useState(false);
   const [isCompleting, setIsCompleting] = useState(false);
   const [isStarting, setIsStarting] = useState(false);
+  const [isCancelling, setIsCancelling] = useState(false);
+  const [isCancelModalOpen, setIsCancelModalOpen] = useState(false);
+  const [cancelErrorMessage, setCancelErrorMessage] = useState("");
+  const [hasCancelled, setHasCancelled] = useState(false);
+  const [isGeneratingPartialFeedback, setIsGeneratingPartialFeedback] =
+    useState(false);
 
-  const loadProgress = useCallback(async () => {
+  const loadInterview = useCallback(async () => {
     setLoadErrorMessage("");
 
     try {
-      const response = await getInterviewProgress(interviewId);
-      setProgress(response);
-      setLoadState("success");
-    } catch (error) {
-      if (error instanceof ApiError && error.code === "INTERVIEW_NOT_STARTED") {
+      const state = await getInterviewState(interviewId);
+
+      if (state.status === "READY") {
+        setProgress(null);
         setLoadState("ready");
         return;
       }
 
-      if (
-        error instanceof ApiError &&
-        error.code === "INTERVIEW_ALREADY_COMPLETED"
-      ) {
+      if (state.status === "COMPLETED" || state.status === "CANCELLED") {
         router.replace(`/interviews/${interviewId}/result`);
         return;
       }
 
+      setProgress(await getInterviewProgress(interviewId));
+      setLoadState("success");
+    } catch (error) {
       setLoadErrorMessage(getInterviewErrorMessage(error));
       setLoadState("error");
     }
   }, [interviewId, router]);
 
   useEffect(() => {
-    if (initialReady) {
-      return;
-    }
+    const timeoutId = window.setTimeout(() => {
+      void loadInterview();
+    }, 0);
 
-    let isActive = true;
-
-    getInterviewProgress(interviewId)
-      .then((response) => {
-        if (isActive) {
-          setProgress(response);
-          setLoadState("success");
-        }
-      })
-      .catch((error: unknown) => {
-        if (!isActive) {
-          return;
-        }
-
-        if (
-          error instanceof ApiError &&
-          error.code === "INTERVIEW_NOT_STARTED"
-        ) {
-          setLoadState("ready");
-          return;
-        }
-
-        if (
-          error instanceof ApiError &&
-          error.code === "INTERVIEW_ALREADY_COMPLETED"
-        ) {
-          router.replace(`/interviews/${interviewId}/result`);
-          return;
-        }
-
-        setLoadErrorMessage(getInterviewErrorMessage(error));
-        setLoadState("error");
-      });
-
-    return () => {
-      isActive = false;
-    };
-  }, [initialReady, interviewId, router]);
+    return () => window.clearTimeout(timeoutId);
+  }, [loadInterview]);
 
   const currentQuestion = useMemo(
     () =>
@@ -392,6 +366,80 @@ export function InterviewProgress({
     }
   }
 
+  async function handleCancel() {
+    if (isCancellingRef.current || !progress) {
+      return;
+    }
+
+    isCancellingRef.current = true;
+    setIsCancelling(true);
+    setCancelErrorMessage("");
+
+    try {
+      const response = await cancelInterview(interviewId);
+      if (response.status !== "CANCELLED") {
+        throw new Error("면접 중도 종료 상태를 확인하지 못했습니다.");
+      }
+
+      setIsCancelModalOpen(false);
+      if (answeredCount < MINIMUM_PARTIAL_FEEDBACK_ANSWER_COUNT) {
+        setProgress(null);
+        setLoadState("cancelled");
+      } else {
+        setHasCancelled(true);
+        setIsCancelModalOpen(true);
+        await generatePartialFeedback(response.interviewId);
+      }
+    } catch (error) {
+      if (
+        error instanceof ApiError &&
+        [
+          "INTERVIEW_NOT_CANCELLABLE",
+          "INTERVIEW_ALREADY_CANCELLED",
+          "INTERVIEW_ALREADY_COMPLETED",
+        ].includes(error.code ?? "")
+      ) {
+        setIsCancelModalOpen(false);
+        setLoadState("loading");
+        await loadInterview();
+        return;
+      }
+
+      setCancelErrorMessage(getInterviewErrorMessage(error));
+    } finally {
+      isCancellingRef.current = false;
+      setIsCancelling(false);
+    }
+  }
+
+  async function generatePartialFeedback(cancelledInterviewId = interviewId) {
+    if (isGeneratingPartialFeedbackRef.current) {
+      return;
+    }
+
+    isGeneratingPartialFeedbackRef.current = true;
+    setIsGeneratingPartialFeedback(true);
+    setCancelErrorMessage("");
+
+    try {
+      await generateInterviewFeedback(cancelledInterviewId);
+      router.replace(`/interviews/${cancelledInterviewId}/result`);
+    } catch (error) {
+      if (
+        error instanceof ApiError &&
+        error.code === "FEEDBACK_ALREADY_EXISTS"
+      ) {
+        router.replace(`/interviews/${cancelledInterviewId}/result`);
+        return;
+      }
+
+      setCancelErrorMessage(getInterviewErrorMessage(error));
+    } finally {
+      isGeneratingPartialFeedbackRef.current = false;
+      setIsGeneratingPartialFeedback(false);
+    }
+  }
+
   if (loadState === "loading") {
     return (
       <div
@@ -416,7 +464,7 @@ export function InterviewProgress({
           type="button"
           onClick={() => {
             setLoadState("loading");
-            void loadProgress();
+            void loadInterview();
           }}
           className="mt-5 rounded-lg bg-zinc-900 px-5 py-2.5 text-sm font-medium text-white hover:bg-zinc-700"
         >
@@ -457,21 +505,28 @@ export function InterviewProgress({
     );
   }
 
-  if (loadState === "unavailable") {
+  if (loadState === "cancelled") {
     return (
-      <div className="rounded-2xl border border-zinc-200 bg-white p-8 text-center shadow-sm">
-        <p className="font-medium text-zinc-800">진행할 수 없는 면접입니다.</p>
-        <p className="mt-2 text-sm text-zinc-500">
-          이미 완료됐거나 현재 진행 상태가 아닙니다.
+      <section className="rounded-2xl border border-amber-200 bg-white p-8 text-center shadow-sm sm:p-12">
+        <div className="mx-auto flex size-14 items-center justify-center rounded-full bg-amber-100 text-xl text-amber-800">
+          !
+        </div>
+        <p className="mt-5 text-sm font-medium text-amber-700">중도 종료</p>
+        <h1 className="mt-2 text-2xl font-semibold text-zinc-900">
+          면접이 중도 종료되었습니다
+        </h1>
+        <p className="mx-auto mt-3 max-w-md text-sm leading-6 text-zinc-600">
+          부분 피드백을 생성하기에는 답변이 부족합니다. 부분 피드백은 최소{" "}
+          {MINIMUM_PARTIAL_FEEDBACK_ANSWER_COUNT}개의 답변이 필요합니다.
         </p>
         <button
           type="button"
-          onClick={() => router.push(`/interviews/${interviewId}/result`)}
-          className="mt-5 rounded-lg bg-zinc-900 px-5 py-2.5 text-sm font-medium text-white hover:bg-zinc-700"
+          onClick={() => router.replace("/dashboard")}
+          className="mt-7 rounded-xl bg-zinc-900 px-5 py-3 font-medium text-white hover:bg-zinc-700"
         >
-          결과 화면으로 이동
+          대시보드로 이동
         </button>
-      </div>
+      </section>
     );
   }
 
@@ -517,7 +572,7 @@ export function InterviewProgress({
             type="button"
             onClick={() => {
               setLoadState("loading");
-              void loadProgress();
+              void loadInterview();
             }}
             className="mt-5 rounded-lg bg-zinc-900 px-5 py-2.5 text-sm font-medium text-white hover:bg-zinc-700"
           >
@@ -654,7 +709,7 @@ export function InterviewProgress({
                 type="button"
                 onClick={() => {
                   setLoadState("loading");
-                  void loadProgress();
+                  void loadInterview();
                 }}
                 className="mt-4 rounded-lg bg-zinc-900 px-5 py-2.5 text-sm font-medium text-white hover:bg-zinc-700"
               >
@@ -772,8 +827,118 @@ export function InterviewProgress({
             >
               {isCompleting ? "면접 종료 중..." : "면접 종료"}
             </button>
+            <button
+              type="button"
+              onClick={() => {
+                setCancelErrorMessage("");
+                setIsCancelModalOpen(true);
+              }}
+              disabled={
+                isCancelling ||
+                isGeneratingPartialFeedback ||
+                isCompleting ||
+                isSubmitting ||
+                isGeneratingFollowUp
+              }
+              className="mt-3 w-full rounded-xl border border-red-300 bg-white px-4 py-3 font-medium text-red-700 hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              면접 그만하기
+            </button>
           </section>
         </>
+      )}
+
+      {isCancelModalOpen && (
+        <div
+          className="fixed inset-0 z-50 flex items-end justify-center bg-black/50 p-4 sm:items-center"
+          role="presentation"
+          onMouseDown={(event) => {
+            if (
+              event.target === event.currentTarget &&
+              !isCancelling &&
+              !isGeneratingPartialFeedback &&
+              !hasCancelled
+            ) {
+              setIsCancelModalOpen(false);
+            }
+          }}
+        >
+          <section
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="cancel-interview-title"
+            className="w-full max-w-md rounded-2xl bg-white p-6 shadow-xl"
+          >
+            <h2
+              id="cancel-interview-title"
+              className="text-lg font-semibold text-zinc-900"
+            >
+              {hasCancelled
+                ? "부분 피드백을 준비하고 있습니다"
+                : "면접을 중도 종료하시겠습니까?"}
+            </h2>
+            {hasCancelled ? (
+              <div className="mt-4 rounded-xl bg-blue-50 p-4 text-sm leading-6 text-blue-800">
+                {isGeneratingPartialFeedback
+                  ? "현재까지의 답변을 분석해 부분 피드백을 생성하고 있습니다. 잠시만 기다려 주세요."
+                  : "면접은 중도 종료되었습니다. 부분 피드백 생성을 다시 시도할 수 있습니다."}
+              </div>
+            ) : (
+              <>
+                <p className="mt-3 text-sm leading-6 text-zinc-600">
+                  완료하지 않은 질문은 평가되지 않으며, 현재까지 답변한 내용을
+                  기준으로 부분 피드백이 제공될 수 있습니다.
+                </p>
+                <div className="mt-4 rounded-xl bg-zinc-50 p-4 text-sm leading-6 text-zinc-700">
+                  현재 {answeredCount}개 질문에 답변했습니다. 부분 피드백은 최소{" "}
+                  {MINIMUM_PARTIAL_FEEDBACK_ANSWER_COUNT}개의 답변이 필요합니다.
+                  {answeredCount < MINIMUM_PARTIAL_FEEDBACK_ANSWER_COUNT && (
+                    <p className="mt-1 font-medium text-amber-700">
+                      지금 종료하면 부분 피드백을 생성할 수 없습니다.
+                    </p>
+                  )}
+                </div>
+              </>
+            )}
+            {cancelErrorMessage && (
+              <p role="alert" className="mt-4 text-sm text-red-600">
+                {cancelErrorMessage}
+              </p>
+            )}
+            <div className="mt-6 flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
+              <button
+                type="button"
+                onClick={() =>
+                  hasCancelled
+                    ? router.replace("/dashboard")
+                    : setIsCancelModalOpen(false)
+                }
+                disabled={isCancelling || isGeneratingPartialFeedback}
+                className="rounded-xl border border-zinc-300 px-4 py-3 text-sm font-medium text-zinc-700 hover:bg-zinc-50 disabled:opacity-50"
+              >
+                {hasCancelled ? "대시보드로 이동" : "계속 면접하기"}
+              </button>
+              <button
+                type="button"
+                onClick={() =>
+                  void (hasCancelled
+                    ? generatePartialFeedback()
+                    : handleCancel())
+                }
+                disabled={isCancelling || isGeneratingPartialFeedback}
+                className="rounded-xl bg-red-700 px-4 py-3 text-sm font-medium text-white hover:bg-red-600 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                {isCancelling
+                  ? "종료 처리 중..."
+                  : isGeneratingPartialFeedback
+                    ? "부분 피드백 생성 중..."
+                    : hasCancelled
+                      ? "부분 피드백 다시 생성"
+                      : "면접 종료하기"}
+              </button>
+            </div>
+          </section>
+        </div>
       )}
     </div>
   );
