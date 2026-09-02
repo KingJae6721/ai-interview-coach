@@ -873,9 +873,17 @@ Questions are returned in execution order: each base question is followed by its
 
 ## Interview Result Query
 
-### GET /interviews/{interviewId}/result
+### GET /api/v1/interviews/{interviewId}/result
 
-Only the completed interview owner can retrieve the questions, submitted answers, and aggregate feedback.
+Only the interview owner can retrieve a `COMPLETED` result or a `CANCELLED` result that has partial feedback.
+The response includes the aggregate feedback and the saved per-answer `QuestionEvaluation`. Evaluation scores use the
+existing 0-100 range. `reasoning` is the concise evaluation summary stored by the current evaluation domain. If an
+answer has no saved evaluation, `evaluation` is `null`; this read-only endpoint never invokes the AI provider.
+
+Generating full or partial interview feedback evaluates only answers that do not already have a
+`QuestionEvaluation`. Root-question and follow-up answers follow the same policy. For partial feedback, unanswered
+questions are not evaluated. If an individual AI evaluation fails, evaluations saved earlier remain available and a
+retry skips them before continuing with the missing answers.
 
 ### Success Response
 

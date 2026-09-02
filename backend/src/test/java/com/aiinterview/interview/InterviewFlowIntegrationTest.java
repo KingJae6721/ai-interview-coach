@@ -1,12 +1,15 @@
 package com.aiinterview.interview;
 
 import com.aiinterview.ai.dto.InterviewFeedbackResult;
+import com.aiinterview.ai.dto.QuestionEvaluationResult;
 import com.aiinterview.ai.service.AiService;
 import com.aiinterview.auth.JwtProvider;
+import com.aiinterview.common.code.ErrorCode;
+import com.aiinterview.common.exception.BusinessException;
 import com.aiinterview.company.entity.Company;
 import com.aiinterview.company.repository.CompanyRepository;
-import com.aiinterview.evaluation.entity.QuestionEvaluation;
 import com.aiinterview.evaluation.repository.QuestionEvaluationRepository;
+import com.aiinterview.feedback.service.FeedbackService;
 import com.aiinterview.feedback.repository.FeedbackRepository;
 import com.aiinterview.interview.entity.Interview;
 import com.aiinterview.interview.entity.InterviewQuestion;
@@ -27,6 +30,8 @@ import com.aiinterview.user.entity.UserStatus;
 import com.aiinterview.user.repository.UserRepository;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import jakarta.persistence.EntityManagerFactory;
+import org.hibernate.SessionFactory;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -112,6 +117,10 @@ class InterviewFlowIntegrationTest {
     private FeedbackRepository feedbackRepository;
     @Autowired
     private QuestionEvaluationRepository questionEvaluationRepository;
+    @Autowired
+    private FeedbackService feedbackService;
+    @Autowired
+    private EntityManagerFactory entityManagerFactory;
 
     @MockitoBean
     private AiService aiService;
@@ -174,6 +183,7 @@ class InterviewFlowIntegrationTest {
                         .summary("Well structured interview")
                         .aiModel("test-model")
                         .build());
+        given(aiService.evaluateQuestionAnswer(any())).willReturn(evaluationResult());
     }
 
     @AfterEach
@@ -361,26 +371,56 @@ class InterviewFlowIntegrationTest {
                 .andExpect(status().isConflict())
                 .andExpect(jsonPath("$.code").value("INTERVIEW_NOT_CANCELLABLE"));
 
+        List<com.aiinterview.interview.entity.InterviewAnswer> submittedAnswers =
+                interviewAnswerRepository.findAllByInterviewIdWithQuestion(interviewId);
+        long firstAnswerId = submittedAnswers.stream()
+                .filter(answer -> answer.getInterviewQuestion().getId().equals(firstQuestionId))
+                .findFirst()
+                .orElseThrow()
+                .getId();
+        long followUpAnswerId = submittedAnswers.stream()
+                .filter(answer -> answer.getInterviewQuestion().getId().equals(followUpQuestionId))
+                .findFirst()
+                .orElseThrow()
+                .getId();
+
+        mockMvc.perform(post("/api/v1/answers/{answerId}/evaluation", firstAnswerId)
+                        .header("Authorization", bearer(otherUserToken)))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.code").value("ACCESS_DENIED"));
+
+        mockMvc.perform(post("/api/v1/answers/{answerId}/evaluation", firstAnswerId)
+                        .header("Authorization", bearer(ownerToken)))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.data.score").value(88))
+                .andExpect(jsonPath("$.data.strengths").value("Clear structure"))
+                .andExpect(jsonPath("$.data.weaknesses").value("More specific examples needed"))
+                .andExpect(jsonPath("$.data.improvementSuggestion").value("Add measurable outcomes"))
+                .andExpect(jsonPath("$.data.reasoning").value("The answer covered the key concepts."));
+
+        mockMvc.perform(post("/api/v1/answers/{answerId}/evaluation", firstAnswerId)
+                        .header("Authorization", bearer(ownerToken)))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.code").value("QUESTION_EVALUATION_ALREADY_EXISTS"));
+
         mockMvc.perform(post("/api/v1/interviews/{interviewId}/feedback", interviewId)
                         .header("Authorization", bearer(ownerToken)))
                 .andExpect(status().isCreated())
                 .andExpect(jsonPath("$.code").value("AI_FEEDBACK_COMPLETED"));
         assertThat(feedbackRepository.existsByInterviewId(interviewId)).isTrue();
+        assertThat(questionEvaluationRepository.findAllByInterviewIdWithAnswer(interviewId)).hasSize(6);
+        then(aiService).should(times(6)).evaluateQuestionAnswer(any());
 
         mockMvc.perform(post("/api/v1/interviews/{interviewId}/feedback", interviewId)
                         .header("Authorization", bearer(ownerToken)))
                 .andExpect(status().isConflict())
                 .andExpect(jsonPath("$.code").value("FEEDBACK_ALREADY_EXISTS"));
 
-        QuestionEvaluation evaluation = questionEvaluationRepository.save(QuestionEvaluation.builder()
-                .answer(interviewAnswerRepository.findAllByInterviewIdWithQuestion(interviewId).get(0))
-                .score(88)
-                .strengths("Clear structure")
-                .weaknesses("More specific examples needed")
-                .improvementSuggestion("Add measurable outcomes")
-                .reasoning("The answer covered the key concepts.")
-                .aiModel("test-model")
-                .build());
+        SessionFactory sessionFactory = entityManagerFactory.unwrap(SessionFactory.class);
+        sessionFactory.getStatistics().setStatisticsEnabled(true);
+        sessionFactory.getStatistics().clear();
+        feedbackService.getInterviewResult(owner.getId(), interviewId);
+        assertThat(sessionFactory.getStatistics().getPrepareStatementCount()).isEqualTo(5);
 
         mockMvc.perform(get("/api/v1/interviews/{interviewId}/result", interviewId)
                         .header("Authorization", bearer(ownerToken)))
@@ -396,13 +436,36 @@ class InterviewFlowIntegrationTest {
                 .andExpect(jsonPath("$.data.questionAnswers[0].category").exists())
                 .andExpect(jsonPath("$.data.questionAnswers[0].difficulty").exists())
                 .andExpect(jsonPath("$.data.questionAnswers[0].followUp").value(false))
-                .andExpect(jsonPath("$.data.questionAnswers[0].evaluation.evaluationId").value(evaluation.getId()))
+                .andExpect(jsonPath("$.data.questionAnswers[0].evaluation.evaluationId").isNumber())
                 .andExpect(jsonPath("$.data.questionAnswers[0].evaluation.score").value(88))
+                .andExpect(jsonPath("$.data.questionAnswers[0].evaluation.strengths").value("Clear structure"))
+                .andExpect(jsonPath("$.data.questionAnswers[0].evaluation.weaknesses")
+                        .value("More specific examples needed"))
+                .andExpect(jsonPath("$.data.questionAnswers[0].evaluation.improvementSuggestion")
+                        .value("Add measurable outcomes"))
+                .andExpect(jsonPath("$.data.questionAnswers[0].evaluation.reasoning")
+                        .value("The answer covered the key concepts."))
                 .andExpect(jsonPath("$.data.questionAnswers[1].parentQuestionId").value(firstQuestionId))
                 .andExpect(jsonPath("$.data.questionAnswers[1].followUp").value(true))
-                .andExpect(jsonPath("$.data.questionAnswers[1].evaluation").doesNotExist())
+                .andExpect(jsonPath("$.data.questionAnswers[1].evaluation.score").value(88))
                 .andExpect(jsonPath("$.data.feedback.overallScore").value(90));
         assertThat(interviewAnswerRepository.countByInterviewQuestionInterviewId(interviewId)).isEqualTo(6);
+
+        questionEvaluationRepository.delete(questionEvaluationRepository.findAllByInterviewIdWithAnswer(interviewId)
+                .stream()
+                .filter(evaluation -> evaluation.getAnswer().getId().equals(followUpAnswerId))
+                .findFirst()
+                .orElseThrow());
+        mockMvc.perform(get("/api/v1/interviews/{interviewId}/result", interviewId)
+                        .header("Authorization", bearer(ownerToken)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.questionAnswers[1].evaluation").doesNotExist());
+        then(aiService).should(times(6)).evaluateQuestionAnswer(any());
+
+        mockMvc.perform(post("/api/v1/answers/{answerId}/evaluation", followUpAnswerId)
+                        .header("Authorization", bearer(ownerToken)))
+                .andExpect(status().isCreated());
+        then(aiService).should(times(7)).evaluateQuestionAnswer(any());
 
         mockMvc.perform(get("/api/v1/dashboard/summary")
                         .header("Authorization", bearer(ownerToken)))
@@ -432,12 +495,12 @@ class InterviewFlowIntegrationTest {
         JsonNode weaknessData = responseData(weaknessResult);
         JsonNode categoryStatistic = findDashboardStatistic(weaknessData.path("categoryStatistics"), "category",
                 evaluatedQuestion.getCategory().name());
-        assertThat(categoryStatistic.path("questionCount").asLong()).isEqualTo(2);
-        assertThat(categoryStatistic.path("evaluationCount").asLong()).isEqualTo(1);
+        assertThat(categoryStatistic.path("questionCount").asLong())
+                .isEqualTo(categoryStatistic.path("evaluationCount").asLong() + 1);
         JsonNode difficultyStatistic = findDashboardStatistic(weaknessData.path("difficultyStatistics"), "difficulty",
                 evaluatedQuestion.getDifficulty().name());
-        assertThat(difficultyStatistic.path("questionCount").asLong()).isGreaterThan(1);
-        assertThat(difficultyStatistic.path("evaluationCount").asLong()).isEqualTo(1);
+        assertThat(difficultyStatistic.path("questionCount").asLong())
+                .isEqualTo(difficultyStatistic.path("evaluationCount").asLong() + 1);
     }
 
     @Test
@@ -495,6 +558,8 @@ class InterviewFlowIntegrationTest {
                     assertThat(feedback.isPartial()).isTrue();
                     assertThat(feedback.getOverallScore()).isNull();
                 });
+        assertThat(questionEvaluationRepository.findAllByInterviewIdWithAnswer(interviewId)).hasSize(2);
+        then(aiService).should(times(2)).evaluateQuestionAnswer(any());
 
         mockMvc.perform(post("/api/v1/interviews/{interviewId}/feedback", interviewId)
                         .header("Authorization", bearer(ownerToken)))
@@ -509,7 +574,10 @@ class InterviewFlowIntegrationTest {
                 .andExpect(jsonPath("$.data.feedback.partial").value(true))
                 .andExpect(jsonPath("$.data.feedback.answeredCount").value(2))
                 .andExpect(jsonPath("$.data.feedback.overallScore").doesNotExist())
-                .andExpect(jsonPath("$.data.questionAnswers.length()").value(5));
+                .andExpect(jsonPath("$.data.questionAnswers.length()").value(5))
+                .andExpect(jsonPath("$.data.questionAnswers[0].evaluation.score").value(88))
+                .andExpect(jsonPath("$.data.questionAnswers[1].evaluation.score").value(88))
+                .andExpect(jsonPath("$.data.questionAnswers[2].evaluation").doesNotExist());
 
         mockMvc.perform(get("/api/v1/dashboard/summary")
                         .header("Authorization", bearer(ownerToken)))
@@ -547,6 +615,41 @@ class InterviewFlowIntegrationTest {
                 .andExpect(jsonPath("$.data.recentInterviews[0].cancelledAt").exists())
                 .andExpect(jsonPath("$.data.recentInterviews[0].feedbackExists").value(false))
                 .andExpect(jsonPath("$.data.recentInterviews[0].partial").value(false));
+    }
+
+    @Test
+    void feedbackGeneration_retriesOnlyMissingEvaluationsAfterAiFailure() throws Exception {
+        long interviewId = createInterview();
+        startInterview(interviewId);
+
+        JsonNode progress = getProgress(interviewId, ownerToken);
+        long firstQuestionId = progress.path("questions").get(0).path("questionId").asLong();
+        long secondQuestionId = progress.path("questions").get(1).path("questionId").asLong();
+        submitAnswer(interviewId, firstQuestionId, ownerToken, "first answer")
+                .andExpect(status().isCreated());
+        submitAnswer(interviewId, secondQuestionId, ownerToken, "second answer")
+                .andExpect(status().isCreated());
+        cancelInterview(interviewId);
+
+        given(aiService.evaluateQuestionAnswer(any()))
+                .willReturn(evaluationResult())
+                .willThrow(new BusinessException(ErrorCode.AI_REQUEST_FAILED))
+                .willReturn(evaluationResult());
+
+        mockMvc.perform(post("/api/v1/interviews/{interviewId}/feedback", interviewId)
+                        .header("Authorization", bearer(ownerToken)))
+                .andExpect(status().isBadGateway())
+                .andExpect(jsonPath("$.code").value("AI_REQUEST_FAILED"));
+        assertThat(questionEvaluationRepository.findAllByInterviewIdWithAnswer(interviewId)).hasSize(1);
+        assertThat(feedbackRepository.existsByInterviewId(interviewId)).isFalse();
+
+        mockMvc.perform(post("/api/v1/interviews/{interviewId}/feedback", interviewId)
+                        .header("Authorization", bearer(ownerToken)))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.data.partial").value(true));
+        assertThat(questionEvaluationRepository.findAllByInterviewIdWithAnswer(interviewId)).hasSize(2);
+        assertThat(feedbackRepository.existsByInterviewId(interviewId)).isTrue();
+        then(aiService).should(times(3)).evaluateQuestionAnswer(any());
     }
 
     @Test
@@ -704,6 +807,17 @@ class InterviewFlowIntegrationTest {
                 .authProvider(AuthProvider.LOCAL)
                 .status(UserStatus.ACTIVE)
                 .build());
+    }
+
+    private QuestionEvaluationResult evaluationResult() {
+        return QuestionEvaluationResult.builder()
+                .score(88)
+                .strengths("Clear structure")
+                .weaknesses("More specific examples needed")
+                .improvementSuggestion("Add measurable outcomes")
+                .reasoning("The answer covered the key concepts.")
+                .aiModel("test-model")
+                .build();
     }
 
     private String bearer(String token) {

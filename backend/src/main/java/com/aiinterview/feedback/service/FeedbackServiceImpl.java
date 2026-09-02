@@ -7,6 +7,7 @@ import com.aiinterview.common.code.ErrorCode;
 import com.aiinterview.common.exception.BusinessException;
 import com.aiinterview.evaluation.entity.QuestionEvaluation;
 import com.aiinterview.evaluation.repository.QuestionEvaluationRepository;
+import com.aiinterview.evaluation.service.QuestionEvaluationService;
 import com.aiinterview.feedback.dto.FeedbackGenerateResponse;
 import com.aiinterview.feedback.dto.InterviewResultFeedbackResponse;
 import com.aiinterview.feedback.dto.InterviewResultQuestionAnswerResponse;
@@ -46,6 +47,7 @@ public class FeedbackServiceImpl implements FeedbackService {
     private final InterviewQuestionRepository interviewQuestionRepository;
     private final InterviewAnswerRepository interviewAnswerRepository;
     private final QuestionEvaluationRepository questionEvaluationRepository;
+    private final QuestionEvaluationService questionEvaluationService;
     private final InterviewQuestionExecutionOrderResolver interviewQuestionExecutionOrderResolver;
     private final AiService aiService;
 
@@ -53,6 +55,7 @@ public class FeedbackServiceImpl implements FeedbackService {
     @Transactional(propagation = Propagation.NOT_SUPPORTED)
     public FeedbackGenerateResponse generateFeedback(Long userId, Long interviewId) {
         FeedbackGenerationContext context = prepareFeedbackRequest(userId, interviewId);
+        questionEvaluationService.evaluateMissing(userId, context.answerIds());
         InterviewFeedbackResult result = aiService.generateInterviewFeedback(context.request());
         Feedback feedback = saveFeedback(interviewId, result, context);
 
@@ -162,7 +165,11 @@ public class FeedbackServiceImpl implements FeedbackService {
                 .questionAnswers(questionAnswers)
                 .build();
 
-        return new FeedbackGenerationContext(request, partial, answeredQuestions.size(), questions.size());
+        List<Long> answerIds = answeredQuestions.stream()
+                .map(question -> answerByQuestionId.get(question.getId()).getId())
+                .toList();
+
+        return new FeedbackGenerationContext(request, answerIds, partial, answeredQuestions.size(), questions.size());
     }
 
     private boolean validateFeedbackGeneration(Long userId, Interview interview) {
@@ -263,7 +270,7 @@ public class FeedbackServiceImpl implements FeedbackService {
                 .build();
     }
 
-    private record FeedbackGenerationContext(InterviewFeedbackRequest request, boolean partial,
+    private record FeedbackGenerationContext(InterviewFeedbackRequest request, List<Long> answerIds, boolean partial,
                                              int answeredCount, int totalQuestionCount) {
     }
 }
