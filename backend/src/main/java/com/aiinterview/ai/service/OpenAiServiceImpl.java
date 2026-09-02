@@ -9,6 +9,7 @@ import com.aiinterview.ai.dto.ResumeAnalysisResult;
 import com.aiinterview.ai.prompt.FeedbackPromptBuilder;
 import com.aiinterview.ai.prompt.FollowUpQuestionPromptBuilder;
 import com.aiinterview.ai.prompt.JobPostingAnalysisPromptBuilder;
+import com.aiinterview.ai.prompt.QuestionEvaluationPolicy;
 import com.aiinterview.ai.prompt.QuestionEvaluationPromptBuilder;
 import com.aiinterview.ai.prompt.ResumeAnalysisPromptBuilder;
 import com.aiinterview.ai.provider.AiCompletionRequest;
@@ -24,6 +25,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
 
 import java.util.List;
+import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Optional;
 
@@ -32,6 +34,12 @@ import java.util.Optional;
 public class OpenAiServiceImpl implements AiService {
 
     private static final int QUESTION_COUNT = 5;
+    private static final String INSUFFICIENT_STRENGTHS = "실질적인 강점을 확인할 수 없습니다.";
+    private static final String INSUFFICIENT_WEAKNESSES = "질문에 대한 평가 가능한 답변이 제공되지 않았습니다.";
+    private static final String INSUFFICIENT_IMPROVEMENT =
+            "질문의 핵심 요구사항에 맞춰 구체적인 설명, 근거 또는 사례를 포함해 답변해 주세요.";
+    private static final String INSUFFICIENT_REASONING =
+            "답변이 질문에 대응하는 의미 있는 평가 정보를 포함하지 않아 평가할 수 없습니다.";
 
     private static final String QUESTION_GENERATION_PROMPT = """
             You are a technical interviewer. Generate exactly five interview questions from the provided interview context.
@@ -88,12 +96,18 @@ public class OpenAiServiceImpl implements AiService {
 
     @Override
     public QuestionEvaluationResult evaluateQuestionAnswer(QuestionEvaluationRequest request) {
+        if (QuestionEvaluationPolicy.isClearlyInsufficient(
+                request.getQuestionContent(), request.getAnswerContent())) {
+            return insufficientQuestionEvaluation();
+        }
+
         try {
             String responseBody = aiProvider.complete(new AiCompletionRequest(
                     QuestionEvaluationPromptBuilder.buildSystemPrompt(),
-                    QuestionEvaluationPromptBuilder.buildUserPrompt(request), questionEvaluationResponseFormat()));
+                    QuestionEvaluationPromptBuilder.buildUserPrompt(request),
+                    questionEvaluationResponseFormat(request)));
 
-            return extractQuestionEvaluation(responseBody);
+            return extractQuestionEvaluation(responseBody, request);
         } catch (JacksonException e) {
             throw jsonDeserializationFailed(e);
         }
@@ -184,7 +198,12 @@ public class OpenAiServiceImpl implements AiService {
         );
     }
 
-    private Map<String, Object> questionEvaluationResponseFormat() {
+    private Map<String, Object> questionEvaluationResponseFormat(QuestionEvaluationRequest request) {
+        Map<String, Object> criterionProperties = new LinkedHashMap<>();
+        QuestionEvaluationPolicy.criteria(request.getCategory()).forEach(criterion ->
+                criterionProperties.put(criterion.key(),
+                        Map.of("type", "integer", "minimum", 0, "maximum", 100)));
+
         return Map.of(
                 "type", "json_schema",
                 "json_schema", Map.of(
@@ -193,14 +212,24 @@ public class OpenAiServiceImpl implements AiService {
                         "schema", Map.of(
                                 "type", "object",
                                 "properties", Map.of(
-                                        "score", Map.of("type", "integer", "minimum", 0, "maximum", 100),
+                                        "sufficient", Map.of("type", "boolean"),
+                                        "criteria", Map.of(
+                                                "type", "object",
+                                                "properties", criterionProperties,
+                                                "required", QuestionEvaluationPolicy.criteria(request.getCategory())
+                                                        .stream()
+                                                        .map(QuestionEvaluationPolicy.Criterion::key)
+                                                        .toList(),
+                                                "additionalProperties", false
+                                        ),
                                         "strengths", Map.of("type", "string"),
                                         "weaknesses", Map.of("type", "string"),
                                         "improvementSuggestion", Map.of("type", "string"),
                                         "reasoning", Map.of("type", "string")
                                 ),
                                 "required", List.of(
-                                        "score", "strengths", "weaknesses", "improvementSuggestion", "reasoning"
+                                        "sufficient", "criteria", "strengths", "weaknesses",
+                                        "improvementSuggestion", "reasoning"
                                 ),
                                 "additionalProperties", false
                         )
@@ -294,7 +323,8 @@ public class OpenAiServiceImpl implements AiService {
                 .build();
     }
 
-    private QuestionEvaluationResult extractQuestionEvaluation(String responseBody) throws JacksonException {
+    private QuestionEvaluationResult extractQuestionEvaluation(String responseBody, QuestionEvaluationRequest request)
+            throws JacksonException {
         JsonNode response = objectMapper.readTree(responseBody);
         JsonNode content = response.at("/choices/0/message/content");
 
@@ -302,18 +332,56 @@ public class OpenAiServiceImpl implements AiService {
             throw unexpectedResponseFormat();
         }
 
-        JsonNode evaluation = objectMapper.readTree(content.asText());
-        JsonNode score = evaluation.get("score");
-        if (score == null || !score.canConvertToInt() || score.intValue() < 0 || score.intValue() > 100) {
+        JsonNode evaluation = objectMapper.readTree(removeJsonCodeFence(content.asText()));
+        JsonNode sufficient = evaluation.get("sufficient");
+        JsonNode criteria = evaluation.get("criteria");
+        if (sufficient == null || !sufficient.isBoolean() || criteria == null || !criteria.isObject()) {
             throw unexpectedResponseFormat();
         }
 
+        String strengths = getRequiredText(evaluation, "strengths");
+        String weaknesses = getRequiredText(evaluation, "weaknesses");
+        String improvementSuggestion = getRequiredText(evaluation, "improvementSuggestion");
+        String reasoning = getRequiredText(evaluation, "reasoning");
+        Map<String, Integer> criterionScores = extractCriterionScores(criteria, request);
+
+        if (!sufficient.booleanValueOpt().orElse(false)) {
+            return insufficientQuestionEvaluation();
+        }
+
+        int score = QuestionEvaluationPolicy.calculateScore(request.getCategory(), criterionScores);
+
         return QuestionEvaluationResult.builder()
-                .score(score.intValue())
-                .strengths(getRequiredText(evaluation, "strengths"))
-                .weaknesses(getRequiredText(evaluation, "weaknesses"))
-                .improvementSuggestion(getRequiredText(evaluation, "improvementSuggestion"))
-                .reasoning(getRequiredText(evaluation, "reasoning"))
+                .score(score)
+                .strengths(strengths)
+                .weaknesses(weaknesses)
+                .improvementSuggestion(improvementSuggestion)
+                .reasoning(reasoning)
+                .aiModel(aiProvider.getModel())
+                .build();
+    }
+
+    private Map<String, Integer> extractCriterionScores(JsonNode criteria, QuestionEvaluationRequest request) {
+        Map<String, Integer> criterionScores = new LinkedHashMap<>();
+        for (QuestionEvaluationPolicy.Criterion criterion
+                : QuestionEvaluationPolicy.criteria(request.getCategory())) {
+            JsonNode criterionScore = criteria.get(criterion.key());
+            if (criterionScore == null || !criterionScore.canConvertToInt()
+                    || criterionScore.intValue() < 0 || criterionScore.intValue() > 100) {
+                throw unexpectedResponseFormat();
+            }
+            criterionScores.put(criterion.key(), criterionScore.intValue());
+        }
+        return criterionScores;
+    }
+
+    private QuestionEvaluationResult insufficientQuestionEvaluation() {
+        return QuestionEvaluationResult.builder()
+                .score(0)
+                .strengths(INSUFFICIENT_STRENGTHS)
+                .weaknesses(INSUFFICIENT_WEAKNESSES)
+                .improvementSuggestion(INSUFFICIENT_IMPROVEMENT)
+                .reasoning(INSUFFICIENT_REASONING)
                 .aiModel(aiProvider.getModel())
                 .build();
     }

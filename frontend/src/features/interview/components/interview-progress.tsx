@@ -224,7 +224,7 @@ export function InterviewProgress({ interviewId }: InterviewProgressProps) {
     ).matches;
     questionElement.scrollIntoView({
       behavior: prefersReducedMotion ? "auto" : "smooth",
-      block: "center",
+      block: "start",
     });
   }, [progress?.nextQuestionId, visibleQuestions]);
 
@@ -257,7 +257,7 @@ export function InterviewProgress({ interviewId }: InterviewProgressProps) {
   function scrollToQuestion(questionId: number, highlight = false) {
     document.getElementById(`question-${questionId}`)?.scrollIntoView({
       behavior: "smooth",
-      block: "center",
+      block: "start",
     });
 
     if (!highlight) {
@@ -727,7 +727,7 @@ export function InterviewProgress({ interviewId }: InterviewProgressProps) {
                     id={`question-${question.questionId}`}
                     key={question.questionId}
                     aria-current={isCurrent ? "step" : undefined}
-                    className={`scroll-m-6 rounded-2xl transition-colors duration-500 ${
+                    className={`scroll-mt-6 rounded-2xl transition-colors duration-500 ${
                       isHighlighted
                         ? "bg-violet-100/80 ring-4 ring-violet-200"
                         : ""

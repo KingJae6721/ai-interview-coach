@@ -287,6 +287,10 @@ class InterviewFlowIntegrationTest {
                 .andExpect(status().isConflict())
                 .andExpect(jsonPath("$.code").value("ANSWER_ORDER_INVALID"));
 
+        submitAnswer(interviewId, firstQuestionId, ownerToken, "")
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("INVALID_INPUT_VALUE"));
+
         submitAnswer(interviewId, firstQuestionId, ownerToken, "first answer")
                 .andExpect(status().isCreated())
                 .andExpect(jsonPath("$.code").value("SUCCESS"));
