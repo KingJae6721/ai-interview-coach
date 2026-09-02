@@ -7,7 +7,10 @@ import {
   generateInterviewFeedback,
   getInterviewResult,
 } from "@/features/interview/services/interview-service";
-import type { InterviewResultResponse } from "@/features/interview/types/interview";
+import type {
+  InterviewResultQuestionAnswerResponse,
+  InterviewResultResponse,
+} from "@/features/interview/types/interview";
 import { ApiError } from "@/services/api-client";
 
 interface InterviewResultProps {
@@ -100,6 +103,22 @@ function formatDateTime(value: string | null): string {
         dateStyle: "medium",
         timeStyle: "short",
       }).format(date);
+}
+
+function getQuestionDisplayNumber(
+  question: InterviewResultQuestionAnswerResponse,
+  questions: InterviewResultQuestionAnswerResponse[],
+): string {
+  const rootQuestions = questions
+    .filter(({ parentQuestionId }) => parentQuestionId === null)
+    .sort((first, second) => first.questionOrder - second.questionOrder);
+  const rootQuestionId = question.parentQuestionId ?? question.questionId;
+  const rootIndex = rootQuestions.findIndex(
+    ({ questionId }) => questionId === rootQuestionId,
+  );
+  const rootNumber = String(rootIndex + 1);
+
+  return question.parentQuestionId === null ? rootNumber : `${rootNumber}-1`;
 }
 
 export function InterviewResult({ interviewId }: InterviewResultProps) {
@@ -206,6 +225,7 @@ export function InterviewResult({ interviewId }: InterviewResultProps) {
       <header className="overflow-hidden rounded-2xl bg-zinc-900 p-6 text-white shadow-sm sm:p-9">
         <div className="flex flex-col gap-6 sm:flex-row sm:items-center sm:justify-between">
           <div>
+            <p className="text-sm font-medium text-zinc-300">종합 면접 분석</p>
             <p className="text-sm text-zinc-400">
               Interview #{result.interviewId} · {result.status}
             </p>
@@ -287,11 +307,15 @@ export function InterviewResult({ interviewId }: InterviewResultProps) {
           {result.questionAnswers.map((item) => (
             <details
               key={item.questionId}
-              className="group rounded-xl border border-zinc-200 bg-zinc-50 open:bg-white"
+              className={`group rounded-xl border bg-zinc-50 open:bg-white ${
+                item.followUp
+                  ? "ml-3 border-violet-200 sm:ml-6"
+                  : "border-zinc-200"
+              }`}
             >
               <summary className="flex cursor-pointer list-none items-start gap-3 px-4 py-4 sm:px-5">
                 <span className="flex size-7 shrink-0 items-center justify-center rounded-full bg-zinc-900 text-xs font-medium text-white">
-                  {item.questionOrder}
+                  {getQuestionDisplayNumber(item, result.questionAnswers)}
                 </span>
                 <span className="flex-1 text-sm leading-6 font-medium text-zinc-900 sm:text-base">
                   <span className="mb-1 flex flex-wrap gap-1.5 text-xs font-normal">
@@ -309,6 +333,11 @@ export function InterviewResult({ interviewId }: InterviewResultProps) {
                   </span>
                   {item.questionContent}
                 </span>
+                {item.evaluation && (
+                  <span className="shrink-0 rounded-full bg-zinc-900 px-2.5 py-1 text-xs font-semibold text-white">
+                    {item.evaluation.score}점
+                  </span>
+                )}
                 <span className="text-zinc-400 transition-transform group-open:rotate-180">
                   ⌄
                 </span>
@@ -329,7 +358,7 @@ export function InterviewResult({ interviewId }: InterviewResultProps) {
                     중도 종료되어 답변하지 않은 질문입니다.
                   </p>
                 )}
-                {item.evaluation && (
+                {item.evaluation ? (
                   <div className="mt-5 rounded-xl border border-zinc-200 bg-white p-4 text-sm text-zinc-700">
                     <p className="font-semibold text-zinc-900">
                       질문별 평가 · {item.evaluation.score}점
@@ -353,7 +382,11 @@ export function InterviewResult({ interviewId }: InterviewResultProps) {
                       </div>
                     </dl>
                   </div>
-                )}
+                ) : item.answerContent ? (
+                  <p className="mt-5 rounded-xl bg-zinc-100 px-4 py-3 text-sm text-zinc-600">
+                    이 답변의 개별 평가는 아직 생성되지 않았습니다.
+                  </p>
+                ) : null}
               </div>
             </details>
           ))}

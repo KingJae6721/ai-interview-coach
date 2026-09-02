@@ -105,6 +105,7 @@ export function InterviewProgress({ interviewId }: InterviewProgressProps) {
   const isCancellingRef = useRef(false);
   const isGeneratingPartialFeedbackRef = useRef(false);
   const isComposingRef = useRef(false);
+  const shouldFocusNextQuestionRef = useRef(false);
   const hasRenderedConversationRef = useRef(false);
   const highlightTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [loadState, setLoadState] = useState<LoadState>("loading");
@@ -205,6 +206,28 @@ export function InterviewProgress({ interviewId }: InterviewProgressProps) {
     }
   }, [conversationVersion]);
 
+  useEffect(() => {
+    if (!progress?.nextQuestionId || !shouldFocusNextQuestionRef.current) {
+      return;
+    }
+
+    const questionElement = document.getElementById(
+      `question-${progress.nextQuestionId}`,
+    );
+    if (!questionElement) {
+      return;
+    }
+
+    shouldFocusNextQuestionRef.current = false;
+    const prefersReducedMotion = window.matchMedia(
+      "(prefers-reduced-motion: reduce)",
+    ).matches;
+    questionElement.scrollIntoView({
+      behavior: prefersReducedMotion ? "auto" : "smooth",
+      block: "center",
+    });
+  }, [progress?.nextQuestionId, visibleQuestions]);
+
   useEffect(
     () => () => {
       if (highlightTimerRef.current) {
@@ -298,14 +321,13 @@ export function InterviewProgress({ interviewId }: InterviewProgressProps) {
               ),
             },
       );
-
       if (currentQuestion.parentQuestionId === null) {
         setPendingFollowUpQuestionId(currentQuestion.questionId);
         await requestFollowUp(currentQuestion.questionId);
         return;
       }
 
-      await refreshProgressAfterTransition();
+      await refreshProgressAfterTransition(true);
     } catch (error) {
       setSubmitErrorMessage(getInterviewErrorMessage(error));
       setIsAdvancingQuestion(false);
@@ -361,9 +383,13 @@ export function InterviewProgress({ interviewId }: InterviewProgressProps) {
     }
   }
 
-  async function refreshProgressAfterTransition(): Promise<boolean> {
+  async function refreshProgressAfterTransition(
+    shouldFocusNextQuestion = false,
+  ): Promise<boolean> {
     try {
-      setProgress(await getInterviewProgress(interviewId));
+      const refreshedProgress = await getInterviewProgress(interviewId);
+      shouldFocusNextQuestionRef.current = shouldFocusNextQuestion;
+      setProgress(refreshedProgress);
       setNeedsProgressRefresh(false);
       setSubmitErrorMessage("");
       return true;
@@ -379,7 +405,7 @@ export function InterviewProgress({ interviewId }: InterviewProgressProps) {
   }
 
   async function handleProgressRefresh() {
-    if (await refreshProgressAfterTransition()) {
+    if (await refreshProgressAfterTransition(true)) {
       setPendingFollowUpQuestionId(null);
     }
   }
@@ -396,7 +422,7 @@ export function InterviewProgress({ interviewId }: InterviewProgressProps) {
           ? `꼬리질문이 등록되었습니다: ${followUp.content}`
           : "추가 꼬리질문 없이 다음 질문으로 진행합니다.",
       );
-      if (await refreshProgressAfterTransition()) {
+      if (await refreshProgressAfterTransition(true)) {
         setPendingFollowUpQuestionId(null);
       }
     } catch (error) {
@@ -836,8 +862,8 @@ export function InterviewProgress({ interviewId }: InterviewProgressProps) {
                       isComposingRef.current = false;
                     }}
                     onKeyDown={handleAnswerKeyDown}
-                    disabled={
-                      !currentQuestion ||
+                    disabled={!currentQuestion}
+                    readOnly={
                       isSubmitting ||
                       isGeneratingFollowUp ||
                       pendingFollowUpQuestionId !== null ||
@@ -850,7 +876,7 @@ export function InterviewProgress({ interviewId }: InterviewProgressProps) {
                         ? "답변을 구체적으로 작성해 주세요."
                         : "답변할 수 있는 질문이 없습니다."
                     }
-                    className="min-h-24 flex-1 resize-y rounded-xl border border-zinc-300 px-3 py-3 text-sm leading-6 outline-none focus:border-zinc-900 focus:ring-2 focus:ring-zinc-200 disabled:bg-zinc-100"
+                    className="min-h-24 flex-1 resize-y rounded-xl border border-zinc-300 px-3 py-3 text-sm leading-6 outline-none read-only:bg-zinc-100 focus:border-zinc-900 focus:ring-2 focus:ring-zinc-200 disabled:bg-zinc-100"
                   />
                   <button
                     type="submit"
