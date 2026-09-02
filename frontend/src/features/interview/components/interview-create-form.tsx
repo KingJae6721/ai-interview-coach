@@ -36,8 +36,6 @@ function getPersonalizationErrorMessage(error: unknown): string {
       "분석한 채용공고를 찾을 수 없습니다. 다시 분석해 주세요.",
     JOB_POSTING_NOT_ANALYZED:
       "채용공고 분석 결과가 없습니다. 다시 분석해 주세요.",
-    JOB_POSTING_POSITION_MISMATCH:
-      "선택한 직무와 분석한 채용공고가 일치하지 않습니다. 다시 분석해 주세요.",
     JOB_POSTING_FETCH_FAILED:
       "채용공고 페이지에 연결하지 못했습니다. URL을 확인해 주세요.",
     JOB_POSTING_CONTENT_NOT_FOUND:

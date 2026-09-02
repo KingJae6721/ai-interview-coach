@@ -3,6 +3,8 @@ package com.aiinterview.jobposting.service;
 import com.aiinterview.ai.dto.JobPostingAnalysisResult;
 import com.aiinterview.common.code.ErrorCode;
 import com.aiinterview.common.exception.BusinessException;
+import com.aiinterview.common.util.NormalizedNameNormalizer;
+import com.aiinterview.common.util.NormalizedNameNormalizer.NormalizedName;
 import com.aiinterview.company.entity.Company;
 import com.aiinterview.company.repository.CompanyRepository;
 import com.aiinterview.jobposition.entity.JobPosition;
@@ -17,12 +19,8 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.text.Normalizer;
 import java.time.LocalDateTime;
-import java.util.Comparator;
 import java.util.List;
-import java.util.Locale;
-import java.util.Optional;
 import java.util.StringJoiner;
 
 @Service
@@ -37,10 +35,9 @@ class JobPostingPersistenceService {
     private final JobPostingAnalysisRepository jobPostingAnalysisRepository;
 
     @Transactional
-    public JobPostingAnalyzeResponse save(Long deprecatedJobPositionId, String postingUrl,
-                                          FetchedJobPostingContent fetchedContent,
+    public JobPostingAnalyzeResponse save(String postingUrl, FetchedJobPostingContent fetchedContent,
                                           JobPostingAnalysisResult analysisResult) {
-        JobPosition jobPosition = resolveJobPosition(deprecatedJobPositionId, analysisResult);
+        JobPosition jobPosition = resolveJobPosition(analysisResult);
 
         JobPosting jobPosting = jobPostingRepository.save(JobPosting.builder()
                 .jobPosition(jobPosition)
@@ -81,65 +78,33 @@ class JobPostingPersistenceService {
                 .build();
     }
 
-    private JobPosition resolveJobPosition(Long deprecatedJobPositionId, JobPostingAnalysisResult analysisResult) {
-        if (deprecatedJobPositionId != null) {
-            return jobPositionRepository.findById(deprecatedJobPositionId)
-                    .orElseThrow(() -> new BusinessException(ErrorCode.JOB_POSITION_NOT_FOUND));
-        }
-
+    private JobPosition resolveJobPosition(JobPostingAnalysisResult analysisResult) {
         NormalizedName companyName = normalizeRequiredName(analysisResult.getCompanyName());
         NormalizedName positionName = normalizeRequiredName(analysisResult.getPositionName());
         Company company = resolveCompany(companyName);
 
         return jobPositionRepository
-                .findFirstByCompanyIdAndNormalizedName(company.getId(), positionName.normalized())
-                .orElseGet(() -> findLegacyJobPosition(company.getId(), positionName.normalized())
-                        .orElseGet(() -> jobPositionRepository.save(JobPosition.builder()
-                                .company(company)
-                                .name(positionName.display())
-                                .normalizedName(positionName.normalized())
-                                .techStack(analysisResult.getTechStack())
-                                .interviewCriteria(buildInterviewCriteria(analysisResult))
-                                .build())));
+                .findFirstByCompanyIdAndNormalizedName(company.getId(), positionName.value())
+                .orElseGet(() -> jobPositionRepository.save(JobPosition.builder()
+                        .company(company)
+                        .name(positionName.displayName())
+                        .techStack(analysisResult.getTechStack())
+                        .interviewCriteria(buildInterviewCriteria(analysisResult))
+                        .build()));
     }
 
     private Company resolveCompany(NormalizedName companyName) {
-        return companyRepository.findFirstByNormalizedName(companyName.normalized())
-                .orElseGet(() -> companyRepository.findAll().stream()
-                        .filter(company -> normalizeForComparison(company.getName()).equals(companyName.normalized()))
-                        .min(Comparator.comparing(Company::getId))
-                        .orElseGet(() -> companyRepository.save(Company.builder()
-                                .name(companyName.display())
-                                .normalizedName(companyName.normalized())
-                                .build())));
-    }
-
-    private Optional<JobPosition> findLegacyJobPosition(Long companyId, String normalizedPositionName) {
-        return jobPositionRepository.findAllByCompanyIdOrderByIdAsc(companyId).stream()
-                .filter(position -> normalizeForComparison(position.getName()).equals(normalizedPositionName))
-                .findFirst();
+        return companyRepository.findFirstByNormalizedName(companyName.value())
+                .orElseGet(() -> companyRepository.save(Company.builder()
+                        .name(companyName.displayName())
+                        .build()));
     }
 
     private NormalizedName normalizeRequiredName(String value) {
-        if (value == null) {
-            throw new BusinessException(ErrorCode.JOB_POSTING_ANALYSIS_INSUFFICIENT);
-        }
-        String display = Normalizer.normalize(value, Normalizer.Form.NFKC)
-                .trim()
-                .replaceAll("\\s+", " ");
-        String normalized = display.toLowerCase(Locale.ROOT);
-        if (display.isBlank() || display.length() > MAX_REFERENCE_NAME_LENGTH
-                || normalized.length() > MAX_REFERENCE_NAME_LENGTH) {
-            throw new BusinessException(ErrorCode.JOB_POSTING_ANALYSIS_INSUFFICIENT);
-        }
-        return new NormalizedName(display, normalized);
-    }
-
-    private String normalizeForComparison(String value) {
-        return Normalizer.normalize(value, Normalizer.Form.NFKC)
-                .trim()
-                .replaceAll("\\s+", " ")
-                .toLowerCase(Locale.ROOT);
+        return NormalizedNameNormalizer.normalize(value)
+                .filter(name -> name.displayName().length() <= MAX_REFERENCE_NAME_LENGTH
+                        && name.value().length() <= MAX_REFERENCE_NAME_LENGTH)
+                .orElseThrow(() -> new BusinessException(ErrorCode.JOB_POSTING_ANALYSIS_INSUFFICIENT));
     }
 
     private String buildInterviewCriteria(JobPostingAnalysisResult analysisResult) {
@@ -155,8 +120,5 @@ class JobPostingPersistenceService {
         if (values != null && !values.isEmpty()) {
             criteria.add(label + ": " + String.join(", ", values));
         }
-    }
-
-    private record NormalizedName(String display, String normalized) {
     }
 }

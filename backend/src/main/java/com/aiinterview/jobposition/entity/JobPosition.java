@@ -1,6 +1,7 @@
 package com.aiinterview.jobposition.entity;
 
 import com.aiinterview.common.entity.BaseEntity;
+import com.aiinterview.common.util.NormalizedNameNormalizer;
 import com.aiinterview.company.entity.Company;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
@@ -40,7 +41,7 @@ public class JobPosition extends BaseEntity {
     @Column(nullable = false, length = 100)
     private String name;
 
-    @Column(name = "normalized_name", length = 100)
+    @Column(name = "normalized_name", nullable = false, length = 100)
     private String normalizedName;
 
     @JdbcTypeCode(SqlTypes.JSON)
@@ -51,11 +52,12 @@ public class JobPosition extends BaseEntity {
     private String interviewCriteria;
 
     @Builder
-    private JobPosition(Company company, String name, String normalizedName,
-                        List<String> techStack, String interviewCriteria) {
+    private JobPosition(Company company, String name, List<String> techStack, String interviewCriteria) {
         this.company = company;
         this.name = name;
-        this.normalizedName = normalizedName;
+        this.normalizedName = NormalizedNameNormalizer.normalize(name)
+                .map(NormalizedNameNormalizer.NormalizedName::value)
+                .orElse(null);
         this.techStack = techStack == null ? null : List.copyOf(techStack);
         this.interviewCriteria = interviewCriteria;
     }

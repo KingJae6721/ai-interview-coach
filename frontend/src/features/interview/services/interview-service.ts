@@ -15,15 +15,10 @@ import type {
   InterviewStateResponse,
   JobPostingAnalyzeRequest,
   JobPostingAnalyzeResponse,
-  JobPositionResponse,
   PageResponse,
   ResumeAnalyzeResponse,
   ResumeSummaryResponse,
 } from "@/features/interview/types/interview";
-
-export function getJobPositions(): Promise<JobPositionResponse[]> {
-  return apiFetch<JobPositionResponse[]>("/api/v1/job-positions");
-}
 
 export function analyzeJobPosting(
   request: JobPostingAnalyzeRequest,

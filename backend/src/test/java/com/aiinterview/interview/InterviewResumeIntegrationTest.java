@@ -125,29 +125,22 @@ class InterviewResumeIntegrationTest {
     }
 
     @Test
-    void createInterview_supportsAllContextCombinationsAndUsesSavedSnapshots() throws Exception {
+    void createInterview_supportsJobPostingWithOptionalResumeAndUsesSavedSnapshots() throws Exception {
         JobPosting jobPosting = createJobPosting();
         Resume resume = createResume(owner, true);
 
-        long basicInterviewId = createInterview(null, null);
         long postingInterviewId = createInterview(jobPosting.getId(), null);
-        long resumeInterviewId = createInterview(null, resume.getId());
         long combinedInterviewId = createInterview(jobPosting.getId(), resume.getId());
 
-        assertRelations(basicInterviewId, null, null);
         assertRelations(postingInterviewId, jobPosting.getId(), null);
-        assertRelations(resumeInterviewId, null, resume.getId());
         assertRelations(combinedInterviewId, jobPosting.getId(), resume.getId());
 
         ArgumentCaptor<String> promptCaptor = ArgumentCaptor.forClass(String.class);
-        then(aiService).should(org.mockito.Mockito.times(4)).generateInterviewQuestions(promptCaptor.capture());
+        then(aiService).should(org.mockito.Mockito.times(2)).generateInterviewQuestions(promptCaptor.capture());
         List<String> prompts = promptCaptor.getAllValues();
-        assertThat(prompts.get(0)).doesNotContain("[JOB POSTING CONTEXT]", "[RESUME CONTEXT]");
-        assertThat(prompts.get(1)).contains("[JOB POSTING CONTEXT]", "Build resilient APIs", "Kafka");
-        assertThat(prompts.get(2)).contains("[RESUME CONTEXT]", "Java, Redis", "Cache project",
-                        "Reduced latency by 40%", "backend, performance")
-                .doesNotContain("private@example.com", "010-1234-5678");
-        assertThat(prompts.get(3)).contains("[JOB POSTING CONTEXT]", "[RESUME CONTEXT]",
+        assertThat(prompts.get(0)).contains("[JOB POSTING CONTEXT]", "Build resilient APIs", "Kafka")
+                .doesNotContain("[RESUME CONTEXT]");
+        assertThat(prompts.get(1)).contains("[JOB POSTING CONTEXT]", "[RESUME CONTEXT]",
                 "Build resilient APIs", "Kafka", "Java, Redis", "Cache project");
 
         then(jobPostingContentFetcher).shouldHaveNoInteractions();
@@ -158,18 +151,20 @@ class InterviewResumeIntegrationTest {
 
     @Test
     void createInterview_allowsOwnedAnalyzedResume() throws Exception {
+        JobPosting jobPosting = createJobPosting();
         Resume resume = createResume(owner, true);
 
-        performCreate(null, resume.getId())
+        performCreate(jobPosting.getId(), resume.getId())
                 .andExpect(status().isCreated())
                 .andExpect(jsonPath("$.data.questionCount").value(5));
     }
 
     @Test
     void createInterview_rejectsAnotherUsersResume() throws Exception {
+        JobPosting jobPosting = createJobPosting();
         Resume resume = createResume(otherUser, true);
 
-        performCreate(null, resume.getId())
+        performCreate(jobPosting.getId(), resume.getId())
                 .andExpect(status().isForbidden())
                 .andExpect(jsonPath("$.code").value("RESUME_ACCESS_DENIED"));
         then(aiService).should(never()).generateInterviewQuestions(anyString());
@@ -177,7 +172,9 @@ class InterviewResumeIntegrationTest {
 
     @Test
     void createInterview_rejectsUnknownResume() throws Exception {
-        performCreate(null, 999999L)
+        JobPosting jobPosting = createJobPosting();
+
+        performCreate(jobPosting.getId(), 999999L)
                 .andExpect(status().isNotFound())
                 .andExpect(jsonPath("$.code").value("RESUME_NOT_FOUND"));
         then(aiService).should(never()).generateInterviewQuestions(anyString());
@@ -185,9 +182,10 @@ class InterviewResumeIntegrationTest {
 
     @Test
     void createInterview_rejectsResumeWithoutAnalysis() throws Exception {
+        JobPosting jobPosting = createJobPosting();
         Resume resume = createResume(owner, false);
 
-        performCreate(null, resume.getId())
+        performCreate(jobPosting.getId(), resume.getId())
                 .andExpect(status().isConflict())
                 .andExpect(jsonPath("$.code").value("RESUME_NOT_ANALYZED"));
         then(aiService).should(never()).generateInterviewQuestions(anyString());
@@ -203,13 +201,12 @@ class InterviewResumeIntegrationTest {
 
     private org.springframework.test.web.servlet.ResultActions performCreate(Long jobPostingId, Long resumeId)
             throws Exception {
-        String positionField = jobPostingId == null ? ",\"jobPositionId\":" + jobPosition.getId() : "";
-        String postingField = jobPostingId == null ? "" : ",\"jobPostingId\":" + jobPostingId;
         String resumeField = resumeId == null ? "" : ",\"resumeId\":" + resumeId;
         return mockMvc.perform(post("/api/v1/interviews")
                 .header("Authorization", "Bearer " + ownerToken)
                 .contentType("application/json")
-                .content("{\"title\":\"Personalized Interview\"" + positionField + postingField + resumeField + "}"));
+                .content("{\"title\":\"Personalized Interview\",\"jobPostingId\":"
+                        + jobPostingId + resumeField + "}"));
     }
 
     private void assertRelations(long interviewId, Long expectedJobPostingId, Long expectedResumeId) {

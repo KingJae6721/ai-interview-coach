@@ -9,9 +9,6 @@ import lombok.NoArgsConstructor;
 @NoArgsConstructor
 public class JobPostingAnalyzeRequest {
 
-    @Deprecated
-    private Long jobPositionId;
-
     @NotBlank
     @Size(max = 2048)
     private String postingUrl;

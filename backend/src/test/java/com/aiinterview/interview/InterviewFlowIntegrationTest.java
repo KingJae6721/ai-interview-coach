@@ -16,6 +16,10 @@ import com.aiinterview.interview.repository.InterviewQuestionRepository;
 import com.aiinterview.interview.repository.InterviewRepository;
 import com.aiinterview.jobposition.entity.JobPosition;
 import com.aiinterview.jobposition.repository.JobPositionRepository;
+import com.aiinterview.jobposting.entity.JobPosting;
+import com.aiinterview.jobposting.entity.JobPostingAnalysis;
+import com.aiinterview.jobposting.repository.JobPostingAnalysisRepository;
+import com.aiinterview.jobposting.repository.JobPostingRepository;
 import com.aiinterview.user.entity.AuthProvider;
 import com.aiinterview.user.entity.User;
 import com.aiinterview.user.entity.UserRole;
@@ -43,6 +47,7 @@ import org.testcontainers.junit.jupiter.Testcontainers;
 import org.testcontainers.utility.DockerImageName;
 import org.mockito.ArgumentCaptor;
 
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
 
@@ -94,6 +99,10 @@ class InterviewFlowIntegrationTest {
     @Autowired
     private JobPositionRepository jobPositionRepository;
     @Autowired
+    private JobPostingRepository jobPostingRepository;
+    @Autowired
+    private JobPostingAnalysisRepository jobPostingAnalysisRepository;
+    @Autowired
     private InterviewRepository interviewRepository;
     @Autowired
     private InterviewQuestionRepository interviewQuestionRepository;
@@ -110,6 +119,7 @@ class InterviewFlowIntegrationTest {
     private User owner;
     private User otherUser;
     private JobPosition jobPosition;
+    private JobPosting jobPosting;
     private String ownerToken;
     private String otherUserToken;
 
@@ -126,6 +136,26 @@ class InterviewFlowIntegrationTest {
                 .name("Backend Developer")
                 .techStack(List.of("Java", "Spring Boot", "JPA"))
                 .interviewCriteria("Explain design decisions with evidence.")
+                .build());
+        jobPosting = jobPostingRepository.save(JobPosting.builder()
+                .jobPosition(jobPosition)
+                .postingUrl("https://example.com/jobs/backend")
+                .title("Backend Developer")
+                .extractedContent("Saved posting snapshot")
+                .build());
+        jobPostingAnalysisRepository.save(JobPostingAnalysis.builder()
+                .jobPosting(jobPosting)
+                .companyName("Example Corp")
+                .positionName("Backend Developer")
+                .responsibilities(List.of("Build APIs"))
+                .requiredQualifications(List.of("Java"))
+                .preferredQualifications(List.of())
+                .techStack(List.of("Java", "Spring Boot"))
+                .experienceRequirements(List.of())
+                .keywords(List.of("backend"))
+                .summary("Backend role")
+                .aiModel("test-model")
+                .analyzedAt(LocalDateTime.now())
                 .build());
         ownerToken = jwtProvider.createAccessToken(owner.getId(), owner.getRole());
         otherUserToken = jwtProvider.createAccessToken(otherUser.getId(), otherUser.getRole());
@@ -152,6 +182,8 @@ class InterviewFlowIntegrationTest {
         interviewAnswerRepository.deleteAll();
         interviewQuestionRepository.deleteAll();
         interviewRepository.deleteAll();
+        jobPostingAnalysisRepository.deleteAll();
+        jobPostingRepository.deleteAll();
         jobPositionRepository.deleteAll();
         companyRepository.deleteAll();
         userRepository.deleteAll();
@@ -602,7 +634,7 @@ class InterviewFlowIntegrationTest {
         MvcResult result = mockMvc.perform(post("/api/v1/interviews")
                         .header("Authorization", bearer(ownerToken))
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"jobPositionId\":" + jobPosition.getId() + ",\"title\":\"Backend Interview\"}"))
+                        .content("{\"jobPostingId\":" + jobPosting.getId() + ",\"title\":\"Backend Interview\"}"))
                 .andExpect(status().isCreated())
                 .andExpect(jsonPath("$.code").value("INTERVIEW_CREATED"))
                 .andExpect(jsonPath("$.data.questionCount").value(5))

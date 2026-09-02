@@ -1,6 +1,7 @@
 package com.aiinterview.company.entity;
 
 import com.aiinterview.common.entity.BaseEntity;
+import com.aiinterview.common.util.NormalizedNameNormalizer;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.GeneratedValue;
@@ -27,7 +28,7 @@ public class Company extends BaseEntity {
     @Column(nullable = false, length = 100)
     private String name;
 
-    @Column(name = "normalized_name", length = 100)
+    @Column(name = "normalized_name", nullable = false, length = 100)
     private String normalizedName;
 
     @Column(name = "website_url", length = 255)
@@ -37,9 +38,11 @@ public class Company extends BaseEntity {
     private String logoUrl;
 
     @Builder
-    private Company(String name, String normalizedName, String websiteUrl, String logoUrl) {
+    private Company(String name, String websiteUrl, String logoUrl) {
         this.name = name;
-        this.normalizedName = normalizedName;
+        this.normalizedName = NormalizedNameNormalizer.normalize(name)
+                .map(NormalizedNameNormalizer.NormalizedName::value)
+                .orElse(null);
         this.websiteUrl = websiteUrl;
         this.logoUrl = logoUrl;
     }

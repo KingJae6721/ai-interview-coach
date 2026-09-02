@@ -17,5 +17,4 @@ public interface JobPositionRepository extends JpaRepository<JobPosition, Long> 
 
     Optional<JobPosition> findFirstByCompanyIdAndNormalizedName(Long companyId, String normalizedName);
 
-    List<JobPosition> findAllByCompanyIdOrderByIdAsc(Long companyId);
 }

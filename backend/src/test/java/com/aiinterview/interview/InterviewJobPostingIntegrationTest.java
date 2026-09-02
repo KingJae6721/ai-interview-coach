@@ -112,18 +112,22 @@ class InterviewJobPostingIntegrationTest {
     }
 
     @Test
-    void createInterview_withoutJobPosting_preservesExistingFlow() throws Exception {
-        long interviewId = createInterview(jobPosition.getId(), null);
-
-        assertThat(interviewRepository.findById(interviewId)).hasValueSatisfying(interview ->
-                assertThat(interview.getJobPosting()).isNull());
+    void createInterview_requiresJobPostingIdAndRejectsLegacyPositionOnlyRequest() throws Exception {
+        mockMvc.perform(post("/api/v1/interviews")
+                        .header("Authorization", "Bearer " + token)
+                        .contentType("application/json")
+                        .content("{\"jobPositionId\":" + jobPosition.getId()
+                                + ",\"title\":\"Legacy Interview\"}"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("INVALID_INPUT_VALUE"));
+        then(aiService).should(never()).generateInterviewQuestions(anyString());
     }
 
     @Test
     void createInterview_withAnalyzedJobPosting_savesRelationAndAddsSnapshotToPrompt() throws Exception {
         JobPosting jobPosting = createJobPosting(jobPosition, true);
 
-        long interviewId = createInterview(jobPosition.getId(), jobPosting.getId());
+        long interviewId = createInterview(jobPosting.getId());
 
         assertThat(interviewRepository.findById(interviewId)).hasValueSatisfying(interview ->
                 assertThat(interview.getJobPosting().getId()).isEqualTo(jobPosting.getId()));
@@ -137,10 +141,10 @@ class InterviewJobPostingIntegrationTest {
     }
 
     @Test
-    void createInterview_withoutJobPositionId_derivesPositionFromJobPosting() throws Exception {
+    void createInterview_derivesPositionFromJobPosting() throws Exception {
         JobPosting jobPosting = createJobPosting(jobPosition, true);
 
-        long interviewId = createInterview(null, jobPosting.getId());
+        long interviewId = createInterview(jobPosting.getId());
 
         assertThat(interviewRepository.findById(interviewId)).hasValueSatisfying(interview -> {
             assertThat(interview.getJobPosition().getId()).isEqualTo(jobPosition.getId());
@@ -150,34 +154,23 @@ class InterviewJobPostingIntegrationTest {
 
     @Test
     void createInterview_rejectsUnknownJobPosting() throws Exception {
-        performCreate(jobPosition.getId(), 999999L)
+        performCreate(999999L)
                 .andExpect(status().isNotFound())
                 .andExpect(jsonPath("$.code").value("JOB_POSTING_NOT_FOUND"));
         then(aiService).should(never()).generateInterviewQuestions(anyString());
     }
 
     @Test
-    void createInterview_rejectsJobPostingFromAnotherPosition() throws Exception {
-        JobPosition otherPosition = jobPositionRepository.save(JobPosition.builder()
-                .company(jobPosition.getCompany()).name("Frontend Developer").build());
-        JobPosting jobPosting = createJobPosting(otherPosition, true);
-
-        performCreate(jobPosition.getId(), jobPosting.getId())
-                .andExpect(status().isConflict())
-                .andExpect(jsonPath("$.code").value("JOB_POSTING_POSITION_MISMATCH"));
-    }
-
-    @Test
     void createInterview_rejectsJobPostingWithoutAnalysis() throws Exception {
         JobPosting jobPosting = createJobPosting(jobPosition, false);
 
-        performCreate(jobPosition.getId(), jobPosting.getId())
+        performCreate(jobPosting.getId())
                 .andExpect(status().isConflict())
                 .andExpect(jsonPath("$.code").value("JOB_POSTING_NOT_ANALYZED"));
     }
 
-    private long createInterview(Long positionId, Long postingId) throws Exception {
-        MvcResult result = performCreate(positionId, postingId)
+    private long createInterview(Long postingId) throws Exception {
+        MvcResult result = performCreate(postingId)
                 .andExpect(status().isCreated())
                 .andExpect(jsonPath("$.data.questionCount").value(5))
                 .andReturn();
@@ -185,14 +178,12 @@ class InterviewJobPostingIntegrationTest {
                 .readTree(result.getResponse().getContentAsString()).at("/data/interviewId").asLong();
     }
 
-    private org.springframework.test.web.servlet.ResultActions performCreate(Long positionId, Long postingId)
+    private org.springframework.test.web.servlet.ResultActions performCreate(Long postingId)
             throws Exception {
-        String optionalPosition = positionId == null ? "" : "\"jobPositionId\":" + positionId + ",";
-        String optionalPosting = postingId == null ? "" : ",\"jobPostingId\":" + postingId;
         return mockMvc.perform(post("/api/v1/interviews")
                 .header("Authorization", "Bearer " + token)
                 .contentType("application/json")
-                .content("{" + optionalPosition + "\"title\":\"Posting Interview\"" + optionalPosting + "}"));
+                .content("{\"title\":\"Posting Interview\",\"jobPostingId\":" + postingId + "}"));
     }
 
     private JobPosting createJobPosting(JobPosition position, boolean analyzed) {

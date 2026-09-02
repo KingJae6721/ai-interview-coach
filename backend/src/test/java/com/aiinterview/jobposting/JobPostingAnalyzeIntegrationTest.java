@@ -115,7 +115,7 @@ class JobPostingAnalyzeIntegrationTest {
 
         mockMvc.perform(post("/api/v1/job-postings/analyze").header("Authorization", bearer())
                         .contentType("application/json")
-                        .content("{\"jobPositionId\":" + jobPosition.getId() + ",\"postingUrl\":\"https://example.com/jobs/1\"}"))
+                        .content("{\"postingUrl\":\"https://example.com/jobs/1\"}"))
                 .andExpect(status().isCreated())
                 .andExpect(jsonPath("$.code").value("CREATED"))
                 .andExpect(jsonPath("$.data.jobPositionId").value(jobPosition.getId()))
@@ -195,16 +195,6 @@ class JobPostingAnalyzeIntegrationTest {
     }
 
     @Test
-    void analyzeJobPosting_rejectsUnknownJobPositionBeforeExternalCalls() throws Exception {
-        mockMvc.perform(post("/api/v1/job-postings/analyze").header("Authorization", bearer())
-                        .contentType("application/json")
-                        .content("{\"jobPositionId\":999999,\"postingUrl\":\"https://example.com/jobs/1\"}"))
-                .andExpect(status().isNotFound()).andExpect(jsonPath("$.code").value("JOB_POSITION_NOT_FOUND"));
-        then(jobPostingContentFetcher).shouldHaveNoInteractions();
-        then(aiService).shouldHaveNoInteractions();
-    }
-
-    @Test
     void analyzeJobPosting_returnsFetchAndContentErrors() throws Exception {
         given(jobPostingContentFetcher.fetch(anyString())).willThrow(new BusinessException(ErrorCode.JOB_POSTING_FETCH_FAILED));
         requestAnalyze().andExpect(status().isBadGateway()).andExpect(jsonPath("$.code").value("JOB_POSTING_FETCH_FAILED"));
@@ -224,7 +214,7 @@ class JobPostingAnalyzeIntegrationTest {
     private org.springframework.test.web.servlet.ResultActions requestAnalyze() throws Exception {
         return mockMvc.perform(post("/api/v1/job-postings/analyze").header("Authorization", bearer())
                 .contentType("application/json")
-                .content("{\"jobPositionId\":" + jobPosition.getId() + ",\"postingUrl\":\"https://example.com/jobs/1\"}"));
+                .content("{\"postingUrl\":\"https://example.com/jobs/1\"}"));
     }
 
     private org.springframework.test.web.servlet.ResultActions requestAnalyzeWithoutPosition(String postingUrl)

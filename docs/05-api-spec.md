@@ -363,8 +363,8 @@ JobPosting + JobPostingAnalysis snapshot persistence
 
 Each request creates a new immutable JobPosting snapshot because the source posting can change. Company names and
 position names are normalized with NFKC, collapsed whitespace, and lowercase comparison. Existing Company and
-JobPosition records are reused; AI analysis never updates an existing reference entity. The legacy `jobPositionId`
-request field remains optional and deprecated for temporary client compatibility.
+JobPosition records are reused; AI analysis never updates an existing reference entity. The request accepts only the
+posting URL and does not accept a client-selected JobPosition.
 
 URL fetch failures return `JOB_POSTING_FETCH_FAILED`; inaccessible or empty posting content returns
 `JOB_POSTING_CONTENT_NOT_FOUND`; disallowed URLs return `JOB_POSTING_URL_NOT_ALLOWED`.
@@ -390,10 +390,9 @@ and no Company, JobPosition, or JobPosting is saved.
 ```
 
 `jobPostingId` is required by the current user-facing contract, and `resumeId` is optional. JobPosition is derived from
-`JobPosting.jobPosition`; clients do not select it directly. The legacy `jobPositionId` field remains optional and
-deprecated for one compatibility window, allowing the previous JobPosition-only flow until removal. If both legacy
-`jobPositionId` and `jobPostingId` are sent, they must resolve to the same JobPosition. A resume must belong to the
-authenticated user and have a saved analysis.
+`JobPosting.jobPosition`; clients do not select it directly and `jobPositionId` is not accepted as a creation context.
+A resume must belong to the authenticated user and have a saved analysis. The derived JobPosition is also persisted on
+Interview for compatibility with History, Result, and Dashboard queries.
 
 ### Process
 
@@ -420,7 +419,7 @@ Question 저장
 ```
 
 Question generation uses saved analysis snapshots only. Interview creation does not refetch a posting URL, reanalyze
-a posting, parse a PDF, or reanalyze a resume. When both optional contexts are provided, the prompt balances role
+a posting, parse a PDF, or reanalyze a resume. When the optional resume context is provided, the prompt balances role
 fundamentals with posting requirements, documented resume experience, and cross-context questions.
 
 ### Response
@@ -457,7 +456,6 @@ Only the owner can start an interview in `READY`. Questions are already generate
 |---|---|---|
 | 404 | `JOB_POSTING_NOT_FOUND` | The requested JobPosting does not exist. |
 | 409 | `JOB_POSTING_NOT_ANALYZED` | The JobPosting does not have a saved analysis. |
-| 409 | `JOB_POSTING_POSITION_MISMATCH` | The JobPosting belongs to another JobPosition. |
 
 ### Resume validation errors
 

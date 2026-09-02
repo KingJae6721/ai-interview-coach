@@ -72,7 +72,7 @@ Table companies {
   id bigint [pk, increment]
 
   name varchar(100) [not null]
-  normalized_name varchar(100) [unique, note: 'NFKC, collapsed whitespace, lowercase; nullable during legacy migration']
+  normalized_name varchar(100) [not null, unique, note: 'NFKC, collapsed whitespace, lowercase']
   website_url varchar(255)
   logo_url varchar(255)
 
@@ -90,7 +90,7 @@ Table job_positions {
   company_id bigint [not null, ref: > companies.id]
 
   name varchar(100) [not null]
-  normalized_name varchar(100) [note: 'Unique with company_id; nullable during legacy migration']
+  normalized_name varchar(100) [not null, note: 'NFKC, collapsed whitespace, lowercase; unique with company_id']
 
   tech_stack json
 
@@ -103,6 +103,11 @@ Table job_positions {
 Indexes {
   (company_id, normalized_name) [unique, name: 'uk_job_positions_company_normalized_name']
 }
+
+`normalized_name`의 위 NOT NULL/UNIQUE 정의는 최종 목표 스키마다. 현재 프로젝트에는 Flyway/Liquibase가 없고
+`ddl-auto=update`를 사용하므로, 배포 전에
+`backend/src/main/resources/db/manual/V20260902__normalized_name_backfill.sql`을 운영자가 직접 실행해야 한다.
+SQL은 정규화 충돌이나 기존 값 불일치를 발견하면 데이터를 병합하지 않고 전체 작업을 중단한다.
 
 // =========================
 // JOB POSTING
@@ -211,11 +216,11 @@ Table interviews {
 
   user_id bigint [not null, ref: > users.id]
 
-  job_position_id bigint [ref: > job_positions.id]
+  job_position_id bigint [ref: > job_positions.id, note: 'Persisted derivation of JobPosting.jobPosition; nullable only for legacy rows']
 
   resume_id bigint [ref: > resumes.id, note: 'Optional analyzed resume snapshot used for question generation']
 
-  job_posting_id bigint [ref: > job_postings.id, note: 'Optional analyzed posting snapshot used for question generation']
+  job_posting_id bigint [ref: > job_postings.id, note: 'Required by the current create contract; nullable only for legacy rows']
 
   interview_type InterviewType
 

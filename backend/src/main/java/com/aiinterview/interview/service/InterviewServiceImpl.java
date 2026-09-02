@@ -30,7 +30,6 @@ import com.aiinterview.interview.repository.InterviewAnswerRepository;
 import com.aiinterview.interview.repository.InterviewQuestionRepository;
 import com.aiinterview.interview.repository.InterviewRepository;
 import com.aiinterview.jobposition.entity.JobPosition;
-import com.aiinterview.jobposition.repository.JobPositionRepository;
 import com.aiinterview.jobposting.entity.JobPosting;
 import com.aiinterview.jobposting.entity.JobPostingAnalysis;
 import com.aiinterview.jobposting.repository.JobPostingAnalysisRepository;
@@ -65,7 +64,6 @@ public class InterviewServiceImpl implements InterviewService {
     private final InterviewQuestionRepository interviewQuestionRepository;
     private final FeedbackRepository feedbackRepository;
     private final UserRepository userRepository;
-    private final JobPositionRepository jobPositionRepository;
     private final JobPostingRepository jobPostingRepository;
     private final JobPostingAnalysisRepository jobPostingAnalysisRepository;
     private final ResumeRepository resumeRepository;
@@ -82,7 +80,7 @@ public class InterviewServiceImpl implements InterviewService {
         }
 
         JobPostingAnalysis jobPostingAnalysis = resolveJobPostingAnalysis(request.getJobPostingId());
-        JobPosition jobPosition = resolveJobPosition(request.getJobPositionId(), jobPostingAnalysis);
+        JobPosition jobPosition = jobPostingAnalysis.getJobPosting().getJobPosition();
         ResumeAnalysis resumeAnalysis = resolveResumeAnalysis(request.getResumeId(), userId);
         JobPosting jobPosting = jobPostingAnalysis == null ? null : jobPostingAnalysis.getJobPosting();
         Resume resume = resumeAnalysis == null ? null : resumeAnalysis.getResume();
@@ -100,16 +98,12 @@ public class InterviewServiceImpl implements InterviewService {
         List<String> generatedQuestions = aiService.generateInterviewQuestions(
                 InterviewQuestionPromptBuilder.buildUserPrompt(
                         interview, jobPostingAnalysis, resumeAnalysis, distributions));
-        return interviewCreationPersistenceService.save(userId, jobPosition.getId(), request.getJobPostingId(),
-                request.getResumeId(), request.getTitle(), generatedQuestions, distributions);
+        return interviewCreationPersistenceService.save(userId, request.getJobPostingId(), request.getResumeId(),
+                request.getTitle(), generatedQuestions, distributions);
     }
 
     private JobPostingAnalysis resolveJobPostingAnalysis(Long jobPostingId) {
-        if (jobPostingId == null) {
-            return null;
-        }
-
-        JobPostingAnalysis analysis = jobPostingAnalysisRepository
+        return jobPostingAnalysisRepository
                 .findWithJobPostingAndJobPositionAndCompanyByJobPostingId(jobPostingId)
                 .orElseGet(() -> {
                     if (!jobPostingRepository.existsById(jobPostingId)) {
@@ -118,22 +112,6 @@ public class InterviewServiceImpl implements InterviewService {
                     throw new BusinessException(ErrorCode.JOB_POSTING_NOT_ANALYZED);
                 });
 
-        return analysis;
-    }
-
-    private JobPosition resolveJobPosition(Long deprecatedJobPositionId, JobPostingAnalysis jobPostingAnalysis) {
-        if (jobPostingAnalysis != null) {
-            JobPosition resolvedPosition = jobPostingAnalysis.getJobPosting().getJobPosition();
-            if (deprecatedJobPositionId != null && !resolvedPosition.getId().equals(deprecatedJobPositionId)) {
-                throw new BusinessException(ErrorCode.JOB_POSTING_POSITION_MISMATCH);
-            }
-            return resolvedPosition;
-        }
-        if (deprecatedJobPositionId == null) {
-            throw new BusinessException(ErrorCode.INTERVIEW_CREATION_CONTEXT_REQUIRED);
-        }
-        return jobPositionRepository.findWithCompanyById(deprecatedJobPositionId)
-                .orElseThrow(() -> new BusinessException(ErrorCode.JOB_POSITION_NOT_FOUND));
     }
 
     private ResumeAnalysis resolveResumeAnalysis(Long resumeId, Long userId) {
