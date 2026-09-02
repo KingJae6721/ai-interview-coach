@@ -15,6 +15,7 @@ import type {
   InterviewStateResponse,
   JobPostingAnalyzeRequest,
   JobPostingAnalyzeResponse,
+  JobPostingSummaryResponse,
   PageResponse,
   ResumeAnalyzeResponse,
   ResumeSummaryResponse,
@@ -27,6 +28,10 @@ export function analyzeJobPosting(
     method: "POST",
     body: JSON.stringify(request),
   });
+}
+
+export function getJobPostings(): Promise<JobPostingSummaryResponse[]> {
+  return apiFetch<JobPostingSummaryResponse[]>("/api/v1/job-postings");
 }
 
 export function getResumes(): Promise<ResumeSummaryResponse[]> {

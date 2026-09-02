@@ -138,6 +138,7 @@ class InterviewFlowIntegrationTest {
                 .interviewCriteria("Explain design decisions with evidence.")
                 .build());
         jobPosting = jobPostingRepository.save(JobPosting.builder()
+                .user(owner)
                 .jobPosition(jobPosition)
                 .postingUrl("https://example.com/jobs/backend")
                 .title("Backend Developer")

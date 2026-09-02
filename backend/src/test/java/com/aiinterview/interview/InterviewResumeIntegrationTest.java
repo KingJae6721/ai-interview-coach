@@ -242,7 +242,7 @@ class InterviewResumeIntegrationTest {
     }
 
     private JobPosting createJobPosting() {
-        JobPosting posting = jobPostingRepository.save(JobPosting.builder().jobPosition(jobPosition)
+        JobPosting posting = jobPostingRepository.save(JobPosting.builder().user(owner).jobPosition(jobPosition)
                 .postingUrl("https://example.com/jobs/backend").title("Backend role")
                 .extractedContent("Saved posting snapshot").build());
         jobPostingAnalysisRepository.save(JobPostingAnalysis.builder().jobPosting(posting)

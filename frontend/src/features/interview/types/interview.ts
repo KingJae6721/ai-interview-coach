@@ -28,7 +28,6 @@ export interface InterviewStateResponse {
   startedAt: string | null;
   completedAt: string | null;
   cancelledAt: string | null;
-  jobPositionId: number | null;
   positionName: string | null;
   companyName: string | null;
 }
@@ -39,7 +38,6 @@ export interface JobPostingAnalyzeRequest {
 
 export interface JobPostingAnalyzeResponse {
   jobPostingId: number;
-  jobPositionId: number;
   postingUrl: string;
   title: string;
   companyName: string;
@@ -51,6 +49,16 @@ export interface JobPostingAnalyzeResponse {
   experienceRequirements: string[];
   keywords: string[];
   summary: string;
+  analyzedAt: string;
+}
+
+export interface JobPostingSummaryResponse {
+  jobPostingId: number;
+  postingUrl: string;
+  companyName: string;
+  positionName: string;
+  summary: string;
+  techStack: string[];
   analyzedAt: string;
 }
 

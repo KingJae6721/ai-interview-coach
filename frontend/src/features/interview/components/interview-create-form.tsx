@@ -14,10 +14,12 @@ import {
   analyzeJobPosting,
   analyzeResume,
   createInterview,
+  getJobPostings,
   getResumes,
 } from "@/features/interview/services/interview-service";
 import type {
   JobPostingAnalyzeResponse,
+  JobPostingSummaryResponse,
   ResumeAnalyzeResponse,
   ResumeSummaryResponse,
 } from "@/features/interview/types/interview";
@@ -27,13 +29,15 @@ const MAX_RESUME_FILE_SIZE = 5 * 1024 * 1024;
 
 type LoadState = "loading" | "success" | "error";
 type AnalysisState = "idle" | "loading" | "success" | "error";
+type PostingMode = "existing" | "new";
+type SelectedJobPosting = JobPostingSummaryResponse | JobPostingAnalyzeResponse;
 
 function getPersonalizationErrorMessage(error: unknown): string {
   if (!(error instanceof ApiError)) return getErrorMessage(error);
 
   const messages: Record<string, string> = {
     JOB_POSTING_NOT_FOUND:
-      "분석한 채용공고를 찾을 수 없습니다. 다시 분석해 주세요.",
+      "선택한 채용공고를 찾을 수 없습니다. 다시 선택해 주세요.",
     JOB_POSTING_NOT_ANALYZED:
       "채용공고 분석 결과가 없습니다. 다시 분석해 주세요.",
     JOB_POSTING_FETCH_FAILED:
@@ -42,7 +46,7 @@ function getPersonalizationErrorMessage(error: unknown): string {
       "채용공고에서 분석할 내용을 찾지 못했습니다.",
     JOB_POSTING_URL_NOT_ALLOWED: "분석할 수 없는 채용공고 URL입니다.",
     JOB_POSTING_ANALYSIS_INSUFFICIENT:
-      "채용공고에서 회사명이나 직무명을 확인하지 못했습니다.",
+      "채용공고에서 회사명 또는 직무명을 확인하지 못했습니다.",
     RESUME_NOT_FOUND: "선택한 이력서를 찾을 수 없습니다.",
     RESUME_ACCESS_DENIED: "선택한 이력서에 접근할 수 없습니다.",
     RESUME_NOT_ANALYZED: "이력서 분석 결과가 없습니다. 다시 업로드해 주세요.",
@@ -69,24 +73,8 @@ function formatDate(value: string): string {
       }).format(date);
 }
 
-function ListPreview({ label, values }: { label: string; values: string[] }) {
-  if (values.length === 0) return null;
-
-  return (
-    <div className="mt-4">
-      <p className="text-xs font-medium text-zinc-500">{label}</p>
-      <ul className="mt-2 space-y-1 text-sm leading-6 text-zinc-700">
-        {values.map((value, index) => (
-          <li key={`${value}-${index}`}>• {value}</li>
-        ))}
-      </ul>
-    </div>
-  );
-}
-
 function TagList({ values }: { values: string[] }) {
   if (values.length === 0) return null;
-
   return (
     <div className="mt-2 flex flex-wrap gap-2">
       {values.map((value, index) => (
@@ -101,21 +89,47 @@ function TagList({ values }: { values: string[] }) {
   );
 }
 
+function ListPreview({ label, values }: { label: string; values: string[] }) {
+  if (values.length === 0) return null;
+  return (
+    <div className="mt-4">
+      <p className="text-xs font-medium text-zinc-500">{label}</p>
+      <ul className="mt-2 space-y-1 text-sm leading-6 text-zinc-700">
+        {values.map((value, index) => (
+          <li key={`${value}-${index}`}>• {value}</li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
+function isDetailedPosting(
+  posting: SelectedJobPosting,
+): posting is JobPostingAnalyzeResponse {
+  return "responsibilities" in posting;
+}
+
 export function InterviewCreateForm() {
   const router = useRouter();
   const isCreatingRef = useRef(false);
   const isPostingAnalysisRef = useRef(false);
   const isResumeAnalysisRef = useRef(false);
+  const [title, setTitle] = useState("");
+  const [postingMode, setPostingMode] = useState<PostingMode>("existing");
+  const [jobPostings, setJobPostings] = useState<JobPostingSummaryResponse[]>(
+    [],
+  );
+  const [postingLoadState, setPostingLoadState] =
+    useState<LoadState>("loading");
+  const [postingLoadError, setPostingLoadError] = useState("");
+  const [postingUrl, setPostingUrl] = useState("");
+  const [selectedPosting, setSelectedPosting] =
+    useState<SelectedJobPosting | null>(null);
+  const [postingState, setPostingState] = useState<AnalysisState>("idle");
+  const [postingError, setPostingError] = useState("");
   const [resumes, setResumes] = useState<ResumeSummaryResponse[]>([]);
   const [resumeLoadState, setResumeLoadState] = useState<LoadState>("loading");
   const [resumeLoadError, setResumeLoadError] = useState("");
-  const [title, setTitle] = useState("");
-  const [postingUrl, setPostingUrl] = useState("");
-  const [jobPosting, setJobPosting] =
-    useState<JobPostingAnalyzeResponse | null>(null);
-  const [postingState, setPostingState] = useState<AnalysisState>("idle");
-  const [postingError, setPostingError] = useState("");
-  const [postingNotice, setPostingNotice] = useState("");
   const [selectedResumeId, setSelectedResumeId] = useState<number | null>(null);
   const [uploadedResume, setUploadedResume] =
     useState<ResumeAnalyzeResponse | null>(null);
@@ -125,6 +139,18 @@ export function InterviewCreateForm() {
   const [isCreating, setIsCreating] = useState(false);
   const [createError, setCreateError] = useState("");
 
+  const loadJobPostings = useCallback(async () => {
+    setPostingLoadState("loading");
+    setPostingLoadError("");
+    try {
+      setJobPostings(await getJobPostings());
+      setPostingLoadState("success");
+    } catch (error) {
+      setJobPostings([]);
+      setPostingLoadError(getPersonalizationErrorMessage(error));
+      setPostingLoadState("error");
+    }
+  }, []);
   const loadResumes = useCallback(async () => {
     setResumeLoadState("loading");
     setResumeLoadError("");
@@ -140,32 +166,34 @@ export function InterviewCreateForm() {
 
   useEffect(() => {
     const timeoutId = window.setTimeout(() => {
+      void loadJobPostings();
       void loadResumes();
     }, 0);
 
     return () => window.clearTimeout(timeoutId);
-  }, [loadResumes]);
+  }, [loadJobPostings, loadResumes]);
+
   const selectedResume =
     uploadedResume?.resumeId === selectedResumeId
       ? uploadedResume
       : (resumes.find((resume) => resume.resumeId === selectedResumeId) ??
         null);
-  const selectedUploadedResume =
-    uploadedResume?.resumeId === selectedResumeId ? uploadedResume : null;
-  const personalizationMessage =
-    jobPosting && selectedResume
-      ? "채용공고 요구사항과 이력서 경험을 함께 분석해 맞춤 질문을 생성합니다."
-      : jobPosting
-        ? "채용공고의 업무와 요구사항을 반영해 질문을 생성합니다."
-        : "채용공고를 분석하면 맞춤 면접을 생성할 수 있습니다.";
+  const isBusy =
+    isCreating || postingState === "loading" || resumeState === "loading";
+  const personalizationMessage = selectedPosting
+    ? selectedResume
+      ? "채용공고 요구사항과 이력서 경험을 함께 반영해 맞춤 질문을 생성합니다."
+      : "선택한 채용공고를 기반으로 맞춤 면접 질문을 생성합니다."
+    : "채용공고를 선택하거나 분석하면 맞춤 면접을 만들 수 있습니다.";
 
-  function clearJobPosting(message = "") {
-    setJobPosting(null);
-    setPostingState("idle");
+  function switchPostingMode(mode: PostingMode) {
+    if (isBusy) return;
+    setPostingMode(mode);
+    setSelectedPosting(null);
     setPostingError("");
-    setPostingNotice(message);
+    setPostingState("idle");
+    setCreateError("");
   }
-
   async function handleJobPostingAnalysis() {
     const normalizedUrl = postingUrl.trim();
     if (isPostingAnalysisRef.current) return;
@@ -173,23 +201,35 @@ export function InterviewCreateForm() {
       setPostingError("채용공고 URL을 입력해 주세요.");
       return;
     }
-
     isPostingAnalysisRef.current = true;
     setPostingState("loading");
     setPostingError("");
-    setPostingNotice("");
+    setSelectedPosting(null);
     try {
-      setJobPosting(await analyzeJobPosting({ postingUrl: normalizedUrl }));
+      const response = await analyzeJobPosting({ postingUrl: normalizedUrl });
+      setSelectedPosting(response);
       setPostingState("success");
+      setJobPostings((current) => [
+        {
+          jobPostingId: response.jobPostingId,
+          postingUrl: response.postingUrl,
+          companyName: response.companyName,
+          positionName: response.positionName,
+          summary: response.summary,
+          techStack: response.techStack,
+          analyzedAt: response.analyzedAt,
+        },
+        ...current.filter(
+          (posting) => posting.jobPostingId !== response.jobPostingId,
+        ),
+      ]);
     } catch (error) {
-      setJobPosting(null);
       setPostingError(getPersonalizationErrorMessage(error));
       setPostingState("error");
     } finally {
       isPostingAnalysisRef.current = false;
     }
   }
-
   function handleFileChange(file: File | null) {
     setResumeError("");
     setResumeState("idle");
@@ -197,10 +237,10 @@ export function InterviewCreateForm() {
       setSelectedFile(null);
       return;
     }
-    const isPdf =
+    if (!(
       file.type === "application/pdf" ||
-      file.name.toLowerCase().endsWith(".pdf");
-    if (!isPdf) {
+      file.name.toLowerCase().endsWith(".pdf")
+    )) {
       setSelectedFile(null);
       setResumeError("PDF 형식의 이력서만 선택할 수 있습니다.");
       return;
@@ -217,7 +257,6 @@ export function InterviewCreateForm() {
     }
     setSelectedFile(file);
   }
-
   async function handleResumeAnalysis() {
     if (!selectedFile || isResumeAnalysisRef.current) return;
     isResumeAnalysisRef.current = true;
@@ -227,6 +266,8 @@ export function InterviewCreateForm() {
       const response = await analyzeResume(selectedFile);
       setUploadedResume(response);
       setSelectedResumeId(response.resumeId);
+      setSelectedFile(null);
+      setResumeState("success");
       setResumes((current) => [
         {
           resumeId: response.resumeId,
@@ -237,8 +278,6 @@ export function InterviewCreateForm() {
         },
         ...current.filter((resume) => resume.resumeId !== response.resumeId),
       ]);
-      setSelectedFile(null);
-      setResumeState("success");
     } catch (error) {
       setResumeError(getPersonalizationErrorMessage(error));
       setResumeState("error");
@@ -246,23 +285,24 @@ export function InterviewCreateForm() {
       isResumeAnalysisRef.current = false;
     }
   }
-
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (isCreatingRef.current) return;
-    if (!title.trim()) return setCreateError("면접 제목을 입력해 주세요.");
-    if (title.trim().length > 100)
-      return setCreateError("면접 제목은 100자 이하로 입력해 주세요.");
-    if (!jobPosting)
-      return setCreateError("채용공고 URL 분석을 먼저 완료해 주세요.");
-
+    if (!title.trim()) {
+      setCreateError("면접 제목을 입력해 주세요.");
+      return;
+    }
+    if (!selectedPosting) {
+      setCreateError("채용공고를 선택하거나 분석해 주세요.");
+      return;
+    }
     isCreatingRef.current = true;
     setIsCreating(true);
     setCreateError("");
     try {
       const response = await createInterview({
         title: title.trim(),
-        jobPostingId: jobPosting.jobPostingId,
+        jobPostingId: selectedPosting.jobPostingId,
         ...(selectedResumeId ? { resumeId: selectedResumeId } : {}),
       });
       router.push(`/interviews/${response.interviewId}`);
@@ -274,8 +314,6 @@ export function InterviewCreateForm() {
     }
   }
 
-  const isBusy =
-    isCreating || postingState === "loading" || resumeState === "loading";
   return (
     <form onSubmit={handleSubmit} className="mt-8 space-y-8" noValidate>
       <section className="space-y-5">
@@ -284,7 +322,7 @@ export function InterviewCreateForm() {
             1. 면접 기본 정보
           </p>
           <p className="mt-1 text-sm text-zinc-500">
-            면접 제목을 입력하고 채용공고를 분석해 주세요.
+            면접 제목을 입력하고 채용공고를 선택해 주세요.
           </p>
         </div>
         <div>
@@ -300,106 +338,175 @@ export function InterviewCreateForm() {
             onChange={(event) => setTitle(event.target.value)}
             maxLength={100}
             disabled={isBusy}
-            placeholder="예: Java 백엔드 면접 연습"
+            placeholder="Java 백엔드 면접 연습"
             className="mt-2 w-full rounded-lg border border-zinc-300 px-3 py-2.5 outline-none focus:border-zinc-900 focus:ring-2 focus:ring-zinc-200 disabled:bg-zinc-100"
           />
           <p className="mt-1.5 text-xs text-zinc-500">최대 100자</p>
         </div>
       </section>
-
       <section className="border-t border-zinc-200 pt-8">
         <p className="text-sm font-semibold text-zinc-900">2. 채용공고</p>
         <p className="mt-2 text-sm text-zinc-500">
-          URL을 분석하면 회사와 직무가 자동으로 결정됩니다.
+          기존 분석 공고를 재사용하거나, 새 URL을 분석할 수 있습니다.
         </p>
-        <div className="mt-4 rounded-xl border border-zinc-200 p-4 sm:p-5">
-          <label
-            htmlFor="postingUrl"
-            className="block text-sm font-medium text-zinc-700"
-          >
-            채용공고 URL
-          </label>
-          <div className="mt-2 flex flex-col gap-3 sm:flex-row">
+        <fieldset disabled={isBusy} className="mt-4 flex gap-5 text-sm">
+          <label className="flex items-center gap-2">
             <input
-              id="postingUrl"
-              type="url"
-              value={postingUrl}
-              disabled={isBusy}
-              onChange={(event) => {
-                setPostingUrl(event.target.value);
-                if (jobPosting)
-                  clearJobPosting(
-                    "URL이 변경되어 이전 분석 결과를 해제했습니다.",
-                  );
-              }}
-              placeholder="https://example.com/jobs/backend"
-              className="min-w-0 flex-1 rounded-lg border border-zinc-300 px-3 py-2.5 outline-none focus:border-zinc-900 focus:ring-2 focus:ring-zinc-200 disabled:bg-zinc-100"
+              type="radio"
+              checked={postingMode === "existing"}
+              onChange={() => switchPostingMode("existing")}
             />
-            <button
-              type="button"
-              onClick={() => void handleJobPostingAnalysis()}
-              disabled={isBusy}
-              className="rounded-lg bg-zinc-900 px-4 py-2.5 text-sm font-medium text-white disabled:opacity-50"
-            >
-              {postingState === "loading" ? "분석 중..." : "채용공고 분석"}
-            </button>
-          </div>
-          {postingState === "loading" && (
-            <p role="status" className="mt-3 text-sm text-blue-700">
-              채용공고를 분석하고 있습니다.
-            </p>
-          )}
-          {postingNotice && (
-            <p className="mt-3 text-sm text-amber-700">{postingNotice}</p>
-          )}
-          {postingError && (
-            <p role="alert" className="mt-3 text-sm text-red-600">
-              {postingError}
-            </p>
-          )}
-          {jobPosting && (
-            <section className="mt-5 rounded-xl bg-zinc-50 p-4">
-              <p className="text-xs font-medium text-zinc-500">
-                분석된 채용공고
+            기존 분석 공고
+          </label>
+          <label className="flex items-center gap-2">
+            <input
+              type="radio"
+              checked={postingMode === "new"}
+              onChange={() => switchPostingMode("new")}
+            />
+            새 URL 분석
+          </label>
+        </fieldset>
+        {postingMode === "existing" ? (
+          <div className="mt-4 space-y-3">
+            {postingLoadState === "loading" && (
+              <p className="text-sm text-zinc-500">
+                기존 채용공고를 불러오는 중입니다.
               </p>
-              <h3 className="mt-1 font-semibold text-zinc-900">
-                {jobPosting.title}
-              </h3>
-              <p className="mt-1 text-sm text-zinc-600">
-                {jobPosting.companyName} · {jobPosting.positionName}
-              </p>
-              <p className="mt-3 text-sm leading-6 text-zinc-700">
-                {jobPosting.summary}
-              </p>
-              <ListPreview
-                label="주요 업무"
-                values={jobPosting.responsibilities}
-              />
-              <ListPreview
-                label="필수 자격"
-                values={jobPosting.requiredQualifications}
-              />
-              <ListPreview
-                label="우대 사항"
-                values={jobPosting.preferredQualifications}
-              />
-              <ListPreview
-                label="경력 요구사항"
-                values={jobPosting.experienceRequirements}
-              />
-              <div className="mt-4">
-                <p className="text-xs font-medium text-zinc-500">
-                  기술 및 키워드
-                </p>
-                <TagList
-                  values={[...jobPosting.techStack, ...jobPosting.keywords]}
-                />
+            )}
+            {postingLoadState === "error" && (
+              <div className="text-sm text-red-600">
+                <p>{postingLoadError}</p>
+                <button
+                  type="button"
+                  onClick={() => void loadJobPostings()}
+                  className="mt-2 underline"
+                >
+                  다시 시도
+                </button>
               </div>
-            </section>
-          )}
-        </div>
+            )}
+            {postingLoadState === "success" && jobPostings.length === 0 && (
+              <div className="rounded-xl border border-dashed border-zinc-300 p-5 text-sm text-zinc-600">
+                아직 분석한 채용공고가 없습니다.{" "}
+                <button
+                  type="button"
+                  onClick={() => switchPostingMode("new")}
+                  className="font-medium text-zinc-900 underline"
+                >
+                  새 URL을 분석해 보세요.
+                </button>
+              </div>
+            )}
+            {jobPostings.map((posting) => (
+              <label
+                key={posting.jobPostingId}
+                className={`block cursor-pointer rounded-xl border p-4 ${selectedPosting?.jobPostingId === posting.jobPostingId ? "border-zinc-900 bg-zinc-50" : "border-zinc-200"}`}
+              >
+                <span className="flex gap-3">
+                  <input
+                    type="radio"
+                    name="jobPosting"
+                    checked={
+                      selectedPosting?.jobPostingId === posting.jobPostingId
+                    }
+                    onChange={() => {
+                      setSelectedPosting(posting);
+                      setPostingError("");
+                    }}
+                  />
+                  <span>
+                    <span className="block font-medium text-zinc-900">
+                      {posting.companyName} · {posting.positionName}
+                    </span>
+                    <span className="mt-1 block text-xs text-zinc-500">
+                      분석일 {formatDate(posting.analyzedAt)}
+                    </span>
+                    <span className="mt-2 block text-sm text-zinc-600">
+                      {posting.summary}
+                    </span>
+                    <TagList values={posting.techStack} />
+                  </span>
+                </span>
+              </label>
+            ))}
+          </div>
+        ) : (
+          <div className="mt-4 rounded-xl border border-zinc-200 p-4 sm:p-5">
+            <label
+              htmlFor="postingUrl"
+              className="block text-sm font-medium text-zinc-700"
+            >
+              채용공고 URL
+            </label>
+            <div className="mt-2 flex flex-col gap-3 sm:flex-row">
+              <input
+                id="postingUrl"
+                type="url"
+                value={postingUrl}
+                disabled={isBusy}
+                onChange={(event) => {
+                  setPostingUrl(event.target.value);
+                  setSelectedPosting(null);
+                }}
+                placeholder="https://example.com/jobs/backend"
+                className="min-w-0 flex-1 rounded-lg border border-zinc-300 px-3 py-2.5 outline-none focus:border-zinc-900 focus:ring-2 focus:ring-zinc-200 disabled:bg-zinc-100"
+              />
+              <button
+                type="button"
+                onClick={() => void handleJobPostingAnalysis()}
+                disabled={isBusy}
+                className="rounded-lg bg-zinc-900 px-4 py-2.5 text-sm font-medium text-white disabled:opacity-50"
+              >
+                {postingState === "loading" ? "분석 중..." : "채용공고 분석"}
+              </button>
+            </div>
+            {postingState === "loading" && (
+              <p role="status" className="mt-3 text-sm text-blue-700">
+                채용공고를 분석하고 있습니다.
+              </p>
+            )}
+            {postingError && (
+              <p role="alert" className="mt-3 text-sm text-red-600">
+                {postingError}
+              </p>
+            )}
+          </div>
+        )}
+        {selectedPosting && (
+          <section className="mt-5 rounded-xl bg-zinc-50 p-4">
+            <p className="text-xs font-medium text-zinc-500">선택한 채용공고</p>
+            <h3 className="mt-1 font-semibold text-zinc-900">
+              {selectedPosting.companyName} · {selectedPosting.positionName}
+            </h3>
+            <p className="mt-3 text-sm leading-6 text-zinc-700">
+              {selectedPosting.summary}
+            </p>
+            <TagList values={selectedPosting.techStack} />
+            {isDetailedPosting(selectedPosting) && (
+              <>
+                <ListPreview
+                  label="주요 업무"
+                  values={selectedPosting.responsibilities}
+                />
+                <ListPreview
+                  label="필수 자격"
+                  values={selectedPosting.requiredQualifications}
+                />
+                <ListPreview
+                  label="우대 사항"
+                  values={selectedPosting.preferredQualifications}
+                />
+                <ListPreview
+                  label="경력 요구사항"
+                  values={selectedPosting.experienceRequirements}
+                />
+                <ListPreview label="키워드" values={selectedPosting.keywords} />
+              </>
+            )}
+          </section>
+        )}
       </section>
-
       <section className="border-t border-zinc-200 pt-8">
         <p className="text-sm font-semibold text-zinc-900">
           3. 이력서 <span className="font-normal text-zinc-500">(선택)</span>
@@ -416,12 +523,12 @@ export function InterviewCreateForm() {
                 setSelectedResumeId(null);
                 setUploadedResume(null);
               }}
-            />{" "}
+            />
             사용하지 않음
           </label>
           {resumeLoadState === "loading" && (
             <p className="text-sm text-zinc-500">
-              기존 이력서를 불러오는 중...
+              기존 이력서를 불러오는 중입니다.
             </p>
           )}
           {resumeLoadState === "error" && (
@@ -514,7 +621,7 @@ export function InterviewCreateForm() {
         {selectedResume && (
           <section className="mt-5 rounded-xl border border-violet-200 bg-violet-50 p-4">
             <p className="text-xs font-medium text-violet-700">
-              현재 사용할 이력서
+              현재 사용하는 이력서
             </p>
             <p className="mt-1 font-semibold text-zinc-900">
               {selectedResume.originalFileName}
@@ -523,46 +630,35 @@ export function InterviewCreateForm() {
               {selectedResume.summary}
             </p>
             <TagList values={selectedResume.skills} />
-            {selectedUploadedResume && (
+            {uploadedResume?.resumeId === selectedResumeId && (
               <>
                 <ListPreview
                   label="주요 경력"
-                  values={selectedUploadedResume.workExperiences}
+                  values={uploadedResume.workExperiences}
                 />
                 <ListPreview
                   label="프로젝트"
-                  values={selectedUploadedResume.projects}
+                  values={uploadedResume.projects}
                 />
                 <ListPreview
                   label="성과"
-                  values={selectedUploadedResume.achievements}
-                />
-                <ListPreview
-                  label="키워드"
-                  values={selectedUploadedResume.keywords}
+                  values={uploadedResume.achievements}
                 />
               </>
             )}
           </section>
         )}
       </section>
-
       <section className="border-t border-zinc-200 pt-8">
         <p className="text-sm font-semibold text-zinc-900">4. 맞춤 설정 요약</p>
         <div className="mt-4 rounded-xl bg-zinc-900 p-5 text-white">
-          <dl className="grid gap-3 text-sm sm:grid-cols-3">
-            <div>
-              <dt className="text-zinc-400">직무</dt>
-              <dd className="mt-1 font-medium">
-                {jobPosting
-                  ? `${jobPosting.companyName} · ${jobPosting.positionName}`
-                  : "채용공고 분석 필요"}
-              </dd>
-            </div>
+          <dl className="grid gap-3 text-sm sm:grid-cols-2">
             <div>
               <dt className="text-zinc-400">채용공고</dt>
               <dd className="mt-1 font-medium">
-                {jobPosting ? "✓ 분석 완료" : "분석 필요"}
+                {selectedPosting
+                  ? `✓ ${selectedPosting.companyName} · ${selectedPosting.positionName}`
+                  : "선택 필요"}
               </dd>
             </div>
             <div>
@@ -586,13 +682,13 @@ export function InterviewCreateForm() {
       )}
       <button
         type="submit"
-        disabled={isBusy || !jobPosting}
+        disabled={isBusy || !selectedPosting}
         className="w-full rounded-lg bg-zinc-900 px-4 py-3 font-medium text-white hover:bg-zinc-700 disabled:cursor-not-allowed disabled:opacity-50"
       >
         {isCreating
           ? selectedResume
-            ? "채용공고와 이력서를 바탕으로 면접 질문을 준비하고 있습니다."
-            : "채용공고를 바탕으로 면접 질문을 준비하고 있습니다."
+            ? "채용공고와 이력서를 바탕으로 면접을 준비하고 있습니다."
+            : "채용공고를 바탕으로 면접을 준비하고 있습니다."
           : "면접 시작하기"}
       </button>
     </form>

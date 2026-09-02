@@ -373,6 +373,34 @@ and no Company, JobPosition, or JobPosting is saved.
 
 ---
 
+## GET /api/v1/job-postings
+
+Returns the authenticated user's analyzed JobPosting snapshots in newest-analysis-first order. The query fetches the
+associated JobPosting in one query and never returns another user's postings.
+
+### Response
+
+```json
+{
+  "success": true,
+  "code": "SUCCESS",
+  "message": "...",
+  "data": [
+    {
+      "jobPostingId": 1,
+      "postingUrl": "https://careers.example.com/jobs/backend-developer",
+      "companyName": "Example Corp",
+      "positionName": "Backend Developer",
+      "summary": "...",
+      "techStack": ["Java", "Spring Boot"],
+      "analyzedAt": "2026-09-02T10:00:00"
+    }
+  ]
+}
+```
+
+---
+
 # Interview API
 
 ## 면접 생성

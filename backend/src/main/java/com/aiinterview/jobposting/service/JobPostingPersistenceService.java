@@ -15,6 +15,8 @@ import com.aiinterview.jobposting.entity.JobPostingAnalysis;
 import com.aiinterview.jobposting.fetch.FetchedJobPostingContent;
 import com.aiinterview.jobposting.repository.JobPostingAnalysisRepository;
 import com.aiinterview.jobposting.repository.JobPostingRepository;
+import com.aiinterview.user.entity.User;
+import com.aiinterview.user.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -33,13 +35,16 @@ class JobPostingPersistenceService {
     private final JobPositionRepository jobPositionRepository;
     private final JobPostingRepository jobPostingRepository;
     private final JobPostingAnalysisRepository jobPostingAnalysisRepository;
+    private final UserRepository userRepository;
 
     @Transactional
-    public JobPostingAnalyzeResponse save(String postingUrl, FetchedJobPostingContent fetchedContent,
+    public JobPostingAnalyzeResponse save(Long userId, String postingUrl, FetchedJobPostingContent fetchedContent,
                                           JobPostingAnalysisResult analysisResult) {
         JobPosition jobPosition = resolveJobPosition(analysisResult);
+        User user = userRepository.getReferenceById(userId);
 
         JobPosting jobPosting = jobPostingRepository.save(JobPosting.builder()
+                .user(user)
                 .jobPosition(jobPosition)
                 .postingUrl(postingUrl)
                 .title(fetchedContent.title())
@@ -76,6 +81,21 @@ class JobPostingPersistenceService {
                 .summary(analysis.getSummary())
                 .analyzedAt(analysis.getAnalyzedAt())
                 .build();
+    }
+
+    @Transactional(readOnly = true)
+    public List<com.aiinterview.jobposting.dto.JobPostingSummaryResponse> getByUserId(Long userId) {
+        return jobPostingAnalysisRepository.findAllWithJobPostingByUserId(userId).stream()
+                .map(analysis -> com.aiinterview.jobposting.dto.JobPostingSummaryResponse.builder()
+                        .jobPostingId(analysis.getJobPosting().getId())
+                        .postingUrl(analysis.getJobPosting().getPostingUrl())
+                        .companyName(analysis.getCompanyName())
+                        .positionName(analysis.getPositionName())
+                        .summary(analysis.getSummary())
+                        .techStack(analysis.getTechStack())
+                        .analyzedAt(analysis.getAnalyzedAt())
+                        .build())
+                .toList();
     }
 
     private JobPosition resolveJobPosition(JobPostingAnalysisResult analysisResult) {

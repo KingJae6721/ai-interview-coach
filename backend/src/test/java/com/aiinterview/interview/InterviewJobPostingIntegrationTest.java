@@ -84,13 +84,14 @@ class InterviewJobPostingIntegrationTest {
     @MockitoBean private JobPostingContentFetcher jobPostingContentFetcher;
 
     private MockMvc mockMvc;
+    private User user;
     private JobPosition jobPosition;
     private String token;
 
     @BeforeEach
     void setUp() {
         mockMvc = MockMvcBuilders.webAppContextSetup(context).apply(springSecurity()).build();
-        User user = userRepository.save(User.builder().email("interview-posting@example.com").password("password")
+        user = userRepository.save(User.builder().email("interview-posting@example.com").password("password")
                 .nickname("posting").role(UserRole.USER).authProvider(AuthProvider.LOCAL).status(UserStatus.ACTIVE).build());
         Company company = companyRepository.save(Company.builder().name("Example Corp").build());
         jobPosition = jobPositionRepository.save(JobPosition.builder().company(company).name("Backend Developer")
@@ -187,7 +188,7 @@ class InterviewJobPostingIntegrationTest {
     }
 
     private JobPosting createJobPosting(JobPosition position, boolean analyzed) {
-        JobPosting posting = jobPostingRepository.save(JobPosting.builder().jobPosition(position)
+        JobPosting posting = jobPostingRepository.save(JobPosting.builder().user(user).jobPosition(position)
                 .postingUrl("https://example.com/jobs/" + position.getId()).title("Backend role")
                 .extractedContent("Saved posting snapshot").build());
         if (analyzed) {

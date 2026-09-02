@@ -4,12 +4,15 @@ import com.aiinterview.ai.dto.JobPostingAnalysisResult;
 import com.aiinterview.ai.service.AiService;
 import com.aiinterview.jobposting.dto.JobPostingAnalyzeRequest;
 import com.aiinterview.jobposting.dto.JobPostingAnalyzeResponse;
+import com.aiinterview.jobposting.dto.JobPostingSummaryResponse;
 import com.aiinterview.jobposting.fetch.FetchedJobPostingContent;
 import com.aiinterview.jobposting.fetch.JobPostingContentFetcher;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
+
+import java.util.List;
 
 @Service
 @RequiredArgsConstructor
@@ -21,10 +24,16 @@ public class JobPostingServiceImpl implements JobPostingService {
 
     @Override
     @Transactional(propagation = Propagation.NOT_SUPPORTED)
-    public JobPostingAnalyzeResponse analyzeJobPosting(JobPostingAnalyzeRequest request) {
+    public JobPostingAnalyzeResponse analyzeJobPosting(Long userId, JobPostingAnalyzeRequest request) {
         FetchedJobPostingContent fetchedContent = jobPostingContentFetcher.fetch(request.getPostingUrl());
         JobPostingAnalysisResult analysisResult = aiService.analyzeJobPosting(fetchedContent.content());
 
-        return jobPostingPersistenceService.save(request.getPostingUrl(), fetchedContent, analysisResult);
+        return jobPostingPersistenceService.save(userId, request.getPostingUrl(), fetchedContent, analysisResult);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public List<JobPostingSummaryResponse> getJobPostings(Long userId) {
+        return jobPostingPersistenceService.getByUserId(userId);
     }
 }

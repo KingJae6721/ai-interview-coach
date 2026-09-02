@@ -47,6 +47,7 @@ import static org.mockito.BDDMockito.then;
 import static org.mockito.Mockito.reset;
 import static org.springframework.security.test.web.servlet.setup.SecurityMockMvcConfigurers.springSecurity;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -125,6 +126,30 @@ class JobPostingAnalyzeIntegrationTest {
                 .satisfies(posting -> assertThat(posting.getJobPosition().getId()).isEqualTo(jobPosition.getId()));
         assertThat(jobPostingAnalysisRepository.findAll()).singleElement()
                 .satisfies(analysis -> assertThat(analysis.getRequiredQualifications()).containsExactly("Java"));
+    }
+
+    @Test
+    void getJobPostings_returnsOnlyCurrentUsersAnalyzedPostings() throws Exception {
+        given(jobPostingContentFetcher.fetch(anyString()))
+                .willReturn(new FetchedJobPostingContent("Backend role", "Build resilient Java APIs."));
+        given(aiService.analyzeJobPosting(anyString())).willReturn(analysisResult());
+
+        requestAnalyze().andExpect(status().isCreated());
+
+        User otherUser = userRepository.save(User.builder().email("other@example.com").password("password")
+                .nickname("other").role(UserRole.USER).authProvider(AuthProvider.LOCAL).status(UserStatus.ACTIVE).build());
+        String otherToken = jwtProvider.createAccessToken(otherUser.getId(), otherUser.getRole());
+
+        mockMvc.perform(get("/api/v1/job-postings").header("Authorization", bearer()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.length()").value(1))
+                .andExpect(jsonPath("$.data[0].companyName").value("Example Corp"))
+                .andExpect(jsonPath("$.data[0].positionName").value("Backend Developer"))
+                .andExpect(jsonPath("$.data[0].techStack[0]").value("Java"));
+
+        mockMvc.perform(get("/api/v1/job-postings").header("Authorization", "Bearer " + otherToken))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.length()").value(0));
     }
 
     @Test

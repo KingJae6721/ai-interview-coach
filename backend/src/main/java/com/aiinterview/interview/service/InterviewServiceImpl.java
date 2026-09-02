@@ -79,7 +79,7 @@ public class InterviewServiceImpl implements InterviewService {
             throw new BusinessException(ErrorCode.USER_NOT_FOUND);
         }
 
-        JobPostingAnalysis jobPostingAnalysis = resolveJobPostingAnalysis(request.getJobPostingId());
+        JobPostingAnalysis jobPostingAnalysis = resolveJobPostingAnalysis(request.getJobPostingId(), userId);
         JobPosition jobPosition = jobPostingAnalysis.getJobPosting().getJobPosition();
         ResumeAnalysis resumeAnalysis = resolveResumeAnalysis(request.getResumeId(), userId);
         JobPosting jobPosting = jobPostingAnalysis == null ? null : jobPostingAnalysis.getJobPosting();
@@ -102,9 +102,11 @@ public class InterviewServiceImpl implements InterviewService {
                 request.getTitle(), generatedQuestions, distributions);
     }
 
-    private JobPostingAnalysis resolveJobPostingAnalysis(Long jobPostingId) {
+    private JobPostingAnalysis resolveJobPostingAnalysis(Long jobPostingId, Long userId) {
         return jobPostingAnalysisRepository
                 .findWithJobPostingAndJobPositionAndCompanyByJobPostingId(jobPostingId)
+                .filter(analysis -> analysis.getJobPosting().getUser() != null
+                        && analysis.getJobPosting().getUser().getId().equals(userId))
                 .orElseGet(() -> {
                     if (!jobPostingRepository.existsById(jobPostingId)) {
                         throw new BusinessException(ErrorCode.JOB_POSTING_NOT_FOUND);
