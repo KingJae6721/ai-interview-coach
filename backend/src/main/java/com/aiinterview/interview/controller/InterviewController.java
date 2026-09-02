@@ -67,7 +67,7 @@ public class InterviewController {
     @GetMapping("/{interviewId}/questions")
     public ResponseEntity<ApiResponse<List<InterviewQuestionResponse>>> getInterviewQuestions(
             @AuthenticationPrincipal CustomUserDetails userDetails,
-            @PathVariable Long interviewId) {
+            @PathVariable("interviewId") Long interviewId) {
 
         List<InterviewQuestionResponse> response = interviewService.getInterviewQuestions(
                 userDetails.getId(), interviewId);
@@ -78,7 +78,7 @@ public class InterviewController {
     @PostMapping("/{interviewId}/start")
     public ResponseEntity<ApiResponse<InterviewStartResponse>> startInterview(
             @AuthenticationPrincipal CustomUserDetails userDetails,
-            @PathVariable Long interviewId) {
+            @PathVariable("interviewId") Long interviewId) {
 
         InterviewStartResponse response = interviewService.startInterview(userDetails.getId(), interviewId);
 
@@ -88,7 +88,7 @@ public class InterviewController {
     @GetMapping("/{interviewId}")
     public ResponseEntity<ApiResponse<InterviewStateResponse>> getInterviewState(
             @AuthenticationPrincipal CustomUserDetails userDetails,
-            @PathVariable Long interviewId) {
+            @PathVariable("interviewId") Long interviewId) {
 
         InterviewStateResponse response = interviewService.getInterviewState(userDetails.getId(), interviewId);
 
@@ -98,7 +98,7 @@ public class InterviewController {
     @GetMapping("/{interviewId}/progress")
     public ResponseEntity<ApiResponse<InterviewProgressResponse>> getInterviewProgress(
             @AuthenticationPrincipal CustomUserDetails userDetails,
-            @PathVariable Long interviewId) {
+            @PathVariable("interviewId") Long interviewId) {
 
         InterviewProgressResponse response = interviewService.getInterviewProgress(userDetails.getId(), interviewId);
 
@@ -108,7 +108,7 @@ public class InterviewController {
     @PostMapping("/questions/{questionId}/answers")
     public ResponseEntity<ApiResponse<InterviewAnswerCreateResponse>> submitAnswer(
             @AuthenticationPrincipal CustomUserDetails userDetails,
-            @PathVariable Long questionId,
+            @PathVariable("questionId") Long questionId,
             @RequestBody @Valid InterviewAnswerCreateRequest request) {
 
         InterviewAnswerCreateResponse response = interviewService.submitAnswer(
@@ -122,7 +122,7 @@ public class InterviewController {
     @PostMapping("/{interviewId}/complete")
     public ResponseEntity<ApiResponse<InterviewCompleteResponse>> completeInterview(
             @AuthenticationPrincipal CustomUserDetails userDetails,
-            @PathVariable Long interviewId) {
+            @PathVariable("interviewId") Long interviewId) {
 
         InterviewCompleteResponse response = interviewService.completeInterview(userDetails.getId(), interviewId);
 
@@ -132,7 +132,7 @@ public class InterviewController {
     @PostMapping("/{interviewId}/cancel")
     public ResponseEntity<ApiResponse<InterviewCancelResponse>> cancelInterview(
             @AuthenticationPrincipal CustomUserDetails userDetails,
-            @PathVariable Long interviewId) {
+            @PathVariable("interviewId") Long interviewId) {
 
         InterviewCancelResponse response = interviewService.cancelInterview(userDetails.getId(), interviewId);
 
@@ -142,7 +142,7 @@ public class InterviewController {
     @PostMapping("/{interviewId}/feedback")
     public ResponseEntity<ApiResponse<FeedbackGenerateResponse>> generateFeedback(
             @AuthenticationPrincipal CustomUserDetails userDetails,
-            @PathVariable Long interviewId) {
+            @PathVariable("interviewId") Long interviewId) {
 
         FeedbackGenerateResponse response = feedbackService.generateFeedback(userDetails.getId(), interviewId);
 
@@ -153,7 +153,7 @@ public class InterviewController {
     @GetMapping("/{interviewId}/result")
     public ResponseEntity<ApiResponse<InterviewResultResponse>> getInterviewResult(
             @AuthenticationPrincipal CustomUserDetails userDetails,
-            @PathVariable Long interviewId) {
+            @PathVariable("interviewId") Long interviewId) {
 
         InterviewResultResponse response = feedbackService.getInterviewResult(userDetails.getId(), interviewId);
 

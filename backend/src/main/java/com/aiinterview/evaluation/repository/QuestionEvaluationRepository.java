@@ -3,6 +3,7 @@ package com.aiinterview.evaluation.repository;
 import com.aiinterview.evaluation.entity.QuestionEvaluation;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
 
 import java.util.List;
 
@@ -17,5 +18,5 @@ public interface QuestionEvaluationRepository extends JpaRepository<QuestionEval
             join answer.interviewQuestion question
             where question.interview.id = :interviewId
             """)
-    List<QuestionEvaluation> findAllByInterviewIdWithAnswer(Long interviewId);
+    List<QuestionEvaluation> findAllByInterviewIdWithAnswer(@Param("interviewId") Long interviewId);
 }

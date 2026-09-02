@@ -41,7 +41,7 @@ public class DashboardController {
     @GetMapping("/score-trend")
     public ResponseEntity<ApiResponse<List<DashboardScoreTrendResponse>>> getScoreTrend(
             @AuthenticationPrincipal CustomUserDetails userDetails,
-            @RequestParam(defaultValue = "10") @Min(1) @Max(100) int limit) {
+            @RequestParam(name = "limit", defaultValue = "10") @Min(1) @Max(100) int limit) {
 
         List<DashboardScoreTrendResponse> response = dashboardService.getScoreTrend(userDetails.getId(), limit);
 
@@ -51,8 +51,8 @@ public class DashboardController {
     @GetMapping("/analytics")
     public ResponseEntity<ApiResponse<List<DashboardAnalyticsResponse>>> getAnalytics(
             @AuthenticationPrincipal CustomUserDetails userDetails,
-            @RequestParam(defaultValue = "WEEKLY") DashboardAnalyticsPeriod period,
-            @RequestParam(defaultValue = "6") @Min(1) @Max(24) int limit) {
+            @RequestParam(name = "period", defaultValue = "WEEKLY") DashboardAnalyticsPeriod period,
+            @RequestParam(name = "limit", defaultValue = "6") @Min(1) @Max(24) int limit) {
 
         List<DashboardAnalyticsResponse> response = dashboardService.getAnalytics(userDetails.getId(), period, limit);
 

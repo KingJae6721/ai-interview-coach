@@ -24,7 +24,7 @@ public class QuestionEvaluationController {
     @PostMapping("/{answerId}/evaluation")
     public ResponseEntity<ApiResponse<QuestionEvaluationResponse>> evaluate(
             @AuthenticationPrincipal CustomUserDetails userDetails,
-            @PathVariable Long answerId) {
+            @PathVariable("answerId") Long answerId) {
 
         QuestionEvaluationResponse response = questionEvaluationService.evaluate(userDetails.getId(), answerId);
 

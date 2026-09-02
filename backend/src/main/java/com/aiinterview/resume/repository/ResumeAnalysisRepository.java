@@ -3,6 +3,7 @@ package com.aiinterview.resume.repository;
 import com.aiinterview.resume.entity.ResumeAnalysis;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
 
 import java.util.List;
 import java.util.Optional;
@@ -14,7 +15,7 @@ public interface ResumeAnalysisRepository extends JpaRepository<ResumeAnalysis, 
             join fetch resume.user
             where resume.id = :resumeId
             """)
-    Optional<ResumeAnalysis> findWithResumeAndUserByResumeId(Long resumeId);
+    Optional<ResumeAnalysis> findWithResumeAndUserByResumeId(@Param("resumeId") Long resumeId);
 
     boolean existsByResumeId(Long resumeId);
 
@@ -24,5 +25,5 @@ public interface ResumeAnalysisRepository extends JpaRepository<ResumeAnalysis, 
             where resume.user.id = :userId
             order by resume.createdAt desc
             """)
-    List<ResumeAnalysis> findAllWithResumeByUserId(Long userId);
+    List<ResumeAnalysis> findAllWithResumeByUserId(@Param("userId") Long userId);
 }

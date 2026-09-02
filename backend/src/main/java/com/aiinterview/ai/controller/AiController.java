@@ -24,7 +24,7 @@ public class AiController {
     @PostMapping("/questions/{questionId}/follow-up")
     public ResponseEntity<ApiResponse<InterviewFollowUpQuestionResponse>> generateFollowUpQuestion(
             @AuthenticationPrincipal CustomUserDetails userDetails,
-            @PathVariable Long questionId) {
+            @PathVariable("questionId") Long questionId) {
 
         InterviewFollowUpQuestionResponse response = interviewService.generateFollowUpQuestion(
                 userDetails.getId(), questionId);
