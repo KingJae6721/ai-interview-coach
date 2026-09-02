@@ -137,6 +137,18 @@ class InterviewJobPostingIntegrationTest {
     }
 
     @Test
+    void createInterview_withoutJobPositionId_derivesPositionFromJobPosting() throws Exception {
+        JobPosting jobPosting = createJobPosting(jobPosition, true);
+
+        long interviewId = createInterview(null, jobPosting.getId());
+
+        assertThat(interviewRepository.findById(interviewId)).hasValueSatisfying(interview -> {
+            assertThat(interview.getJobPosition().getId()).isEqualTo(jobPosition.getId());
+            assertThat(interview.getJobPosting().getId()).isEqualTo(jobPosting.getId());
+        });
+    }
+
+    @Test
     void createInterview_rejectsUnknownJobPosting() throws Exception {
         performCreate(jobPosition.getId(), 999999L)
                 .andExpect(status().isNotFound())
@@ -175,11 +187,12 @@ class InterviewJobPostingIntegrationTest {
 
     private org.springframework.test.web.servlet.ResultActions performCreate(Long positionId, Long postingId)
             throws Exception {
+        String optionalPosition = positionId == null ? "" : "\"jobPositionId\":" + positionId + ",";
         String optionalPosting = postingId == null ? "" : ",\"jobPostingId\":" + postingId;
         return mockMvc.perform(post("/api/v1/interviews")
                 .header("Authorization", "Bearer " + token)
                 .contentType("application/json")
-                .content("{\"jobPositionId\":" + positionId + optionalPosting + ",\"title\":\"Posting Interview\"}"));
+                .content("{" + optionalPosition + "\"title\":\"Posting Interview\"" + optionalPosting + "}"));
     }
 
     private JobPosting createJobPosting(JobPosition position, boolean analyzed) {

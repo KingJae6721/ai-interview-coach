@@ -58,16 +58,25 @@ public interface InterviewRepository extends JpaRepository<Interview, Long> {
     List<DashboardScoreTrendResponse> findRecentCompletedScoreTrendByUserId(Long userId, Pageable pageable);
 
     @Query("select new com.aiinterview.dashboard.dto.DashboardAnalyticsProjection("
-            + "cast(function('date_trunc', :dateTruncUnit, interview.completedAt) as LocalDateTime), "
+            + "cast(function('date_trunc', 'week', interview.completedAt) as LocalDateTime), "
             + "avg(feedback.overallScore), count(interview)) "
             + "from Interview interview "
             + "join Feedback feedback on feedback.interview = interview "
             + "where interview.user.id = :userId "
             + "and interview.status = com.aiinterview.interview.entity.InterviewStatus.COMPLETED "
-            + "group by cast(function('date_trunc', :dateTruncUnit, interview.completedAt) as LocalDateTime) "
-            + "order by cast(function('date_trunc', :dateTruncUnit, interview.completedAt) as LocalDateTime) desc")
-    List<DashboardAnalyticsProjection> findDashboardAnalyticsByUserId(
-            Long userId, String dateTruncUnit, Pageable pageable);
+            + "group by cast(function('date_trunc', 'week', interview.completedAt) as LocalDateTime) "
+            + "order by cast(function('date_trunc', 'week', interview.completedAt) as LocalDateTime) desc")
+    List<DashboardAnalyticsProjection> findWeeklyDashboardAnalyticsByUserId(Long userId, Pageable pageable);
+
+    @Query("select new com.aiinterview.dashboard.dto.DashboardAnalyticsProjection("
+            + "truncate(interview.completedAt, month), avg(feedback.overallScore), count(interview)) "
+            + "from Interview interview "
+            + "join Feedback feedback on feedback.interview = interview "
+            + "where interview.user.id = :userId "
+            + "and interview.status = com.aiinterview.interview.entity.InterviewStatus.COMPLETED "
+            + "group by truncate(interview.completedAt, month) "
+            + "order by truncate(interview.completedAt, month) desc")
+    List<DashboardAnalyticsProjection> findMonthlyDashboardAnalyticsByUserId(Long userId, Pageable pageable);
 
     @Query("select new com.aiinterview.dashboard.dto.DashboardCategoryStatisticsProjection("
             + "question.category, count(distinct interview), count(question), count(evaluation), avg(evaluation.score)) "

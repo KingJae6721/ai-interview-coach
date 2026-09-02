@@ -11,6 +11,7 @@ import jakarta.persistence.Id;
 import jakarta.persistence.JoinColumn;
 import jakarta.persistence.ManyToOne;
 import jakarta.persistence.Table;
+import jakarta.persistence.UniqueConstraint;
 import lombok.AccessLevel;
 import lombok.Builder;
 import lombok.Getter;
@@ -21,7 +22,9 @@ import org.hibernate.type.SqlTypes;
 import java.util.List;
 
 @Entity
-@Table(name = "job_positions")
+@Table(name = "job_positions", uniqueConstraints =
+        @UniqueConstraint(name = "uk_job_positions_company_normalized_name",
+                columnNames = {"company_id", "normalized_name"}))
 @Getter
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
 public class JobPosition extends BaseEntity {
@@ -37,6 +40,9 @@ public class JobPosition extends BaseEntity {
     @Column(nullable = false, length = 100)
     private String name;
 
+    @Column(name = "normalized_name", length = 100)
+    private String normalizedName;
+
     @JdbcTypeCode(SqlTypes.JSON)
     @Column(name = "tech_stack", columnDefinition = "jsonb")
     private List<String> techStack;
@@ -45,9 +51,11 @@ public class JobPosition extends BaseEntity {
     private String interviewCriteria;
 
     @Builder
-    private JobPosition(Company company, String name, List<String> techStack, String interviewCriteria) {
+    private JobPosition(Company company, String name, String normalizedName,
+                        List<String> techStack, String interviewCriteria) {
         this.company = company;
         this.name = name;
+        this.normalizedName = normalizedName;
         this.techStack = techStack == null ? null : List.copyOf(techStack);
         this.interviewCriteria = interviewCriteria;
     }

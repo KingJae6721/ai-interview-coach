@@ -37,6 +37,8 @@ public enum ErrorCode {
     JOB_POSTING_URL_NOT_ALLOWED(HttpStatus.BAD_REQUEST, "Job posting URL is not allowed."),
     JOB_POSTING_FETCH_FAILED(HttpStatus.BAD_GATEWAY, "Job posting could not be fetched."),
     JOB_POSTING_CONTENT_NOT_FOUND(HttpStatus.UNPROCESSABLE_CONTENT, "Job posting content could not be extracted."),
+    JOB_POSTING_ANALYSIS_INSUFFICIENT(HttpStatus.UNPROCESSABLE_CONTENT,
+            "Job posting analysis must include company and position names."),
 
     // Resume
     RESUME_INVALID_FILE(HttpStatus.BAD_REQUEST, "A valid PDF resume is required."),
@@ -49,6 +51,8 @@ public enum ErrorCode {
 
     // Interview
     INTERVIEW_NOT_FOUND(HttpStatus.NOT_FOUND, "면접을 찾을 수 없습니다."),
+    INTERVIEW_CREATION_CONTEXT_REQUIRED(HttpStatus.BAD_REQUEST,
+            "Job posting or deprecated job position is required."),
     INTERVIEW_ALREADY_STARTED(HttpStatus.CONFLICT, "이미 시작된 면접입니다."),
     INTERVIEW_NOT_STARTED(HttpStatus.CONFLICT, "면접이 아직 시작되지 않았습니다."),
     INTERVIEW_ALREADY_COMPLETED(HttpStatus.CONFLICT, "이미 완료된 면접입니다."),

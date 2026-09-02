@@ -1,8 +1,9 @@
 export interface InterviewCreateRequest {
-  jobPositionId: number;
   title: string;
-  jobPostingId?: number;
+  jobPostingId: number;
   resumeId?: number;
+  /** @deprecated Backend compatibility only. The UI derives it from jobPostingId. */
+  jobPositionId?: number;
 }
 
 export type InterviewStatus =
@@ -43,8 +44,9 @@ export interface JobPositionResponse {
 }
 
 export interface JobPostingAnalyzeRequest {
-  jobPositionId: number;
   postingUrl: string;
+  /** @deprecated Backend compatibility only. The UI does not send this field. */
+  jobPositionId?: number;
 }
 
 export interface JobPostingAnalyzeResponse {

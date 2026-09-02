@@ -81,10 +81,8 @@ public class InterviewServiceImpl implements InterviewService {
             throw new BusinessException(ErrorCode.USER_NOT_FOUND);
         }
 
-        JobPosition jobPosition = jobPositionRepository.findWithCompanyById(request.getJobPositionId())
-                .orElseThrow(() -> new BusinessException(ErrorCode.JOB_POSITION_NOT_FOUND));
-        JobPostingAnalysis jobPostingAnalysis = resolveJobPostingAnalysis(
-                request.getJobPostingId(), jobPosition.getId());
+        JobPostingAnalysis jobPostingAnalysis = resolveJobPostingAnalysis(request.getJobPostingId());
+        JobPosition jobPosition = resolveJobPosition(request.getJobPositionId(), jobPostingAnalysis);
         ResumeAnalysis resumeAnalysis = resolveResumeAnalysis(request.getResumeId(), userId);
         JobPosting jobPosting = jobPostingAnalysis == null ? null : jobPostingAnalysis.getJobPosting();
         Resume resume = resumeAnalysis == null ? null : resumeAnalysis.getResume();
@@ -106,7 +104,7 @@ public class InterviewServiceImpl implements InterviewService {
                 request.getResumeId(), request.getTitle(), generatedQuestions, distributions);
     }
 
-    private JobPostingAnalysis resolveJobPostingAnalysis(Long jobPostingId, Long jobPositionId) {
+    private JobPostingAnalysis resolveJobPostingAnalysis(Long jobPostingId) {
         if (jobPostingId == null) {
             return null;
         }
@@ -120,10 +118,22 @@ public class InterviewServiceImpl implements InterviewService {
                     throw new BusinessException(ErrorCode.JOB_POSTING_NOT_ANALYZED);
                 });
 
-        if (!analysis.getJobPosting().getJobPosition().getId().equals(jobPositionId)) {
-            throw new BusinessException(ErrorCode.JOB_POSTING_POSITION_MISMATCH);
-        }
         return analysis;
+    }
+
+    private JobPosition resolveJobPosition(Long deprecatedJobPositionId, JobPostingAnalysis jobPostingAnalysis) {
+        if (jobPostingAnalysis != null) {
+            JobPosition resolvedPosition = jobPostingAnalysis.getJobPosting().getJobPosition();
+            if (deprecatedJobPositionId != null && !resolvedPosition.getId().equals(deprecatedJobPositionId)) {
+                throw new BusinessException(ErrorCode.JOB_POSTING_POSITION_MISMATCH);
+            }
+            return resolvedPosition;
+        }
+        if (deprecatedJobPositionId == null) {
+            throw new BusinessException(ErrorCode.INTERVIEW_CREATION_CONTEXT_REQUIRED);
+        }
+        return jobPositionRepository.findWithCompanyById(deprecatedJobPositionId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.JOB_POSITION_NOT_FOUND));
     }
 
     private ResumeAnalysis resolveResumeAnalysis(Long resumeId, Long userId) {

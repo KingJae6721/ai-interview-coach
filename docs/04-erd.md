@@ -72,6 +72,7 @@ Table companies {
   id bigint [pk, increment]
 
   name varchar(100) [not null]
+  normalized_name varchar(100) [unique, note: 'NFKC, collapsed whitespace, lowercase; nullable during legacy migration']
   website_url varchar(255)
   logo_url varchar(255)
 
@@ -89,6 +90,7 @@ Table job_positions {
   company_id bigint [not null, ref: > companies.id]
 
   name varchar(100) [not null]
+  normalized_name varchar(100) [note: 'Unique with company_id; nullable during legacy migration']
 
   tech_stack json
 
@@ -96,6 +98,10 @@ Table job_positions {
 
   created_at timestamp
   updated_at timestamp
+}
+
+Indexes {
+  (company_id, normalized_name) [unique, name: 'uk_job_positions_company_normalized_name']
 }
 
 // =========================

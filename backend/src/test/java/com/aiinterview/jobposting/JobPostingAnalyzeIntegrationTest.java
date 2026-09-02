@@ -7,6 +7,8 @@ import com.aiinterview.common.code.ErrorCode;
 import com.aiinterview.common.exception.BusinessException;
 import com.aiinterview.company.entity.Company;
 import com.aiinterview.company.repository.CompanyRepository;
+import com.aiinterview.interview.repository.InterviewQuestionRepository;
+import com.aiinterview.interview.repository.InterviewRepository;
 import com.aiinterview.jobposition.entity.JobPosition;
 import com.aiinterview.jobposition.repository.JobPositionRepository;
 import com.aiinterview.jobposting.fetch.FetchedJobPostingContent;
@@ -27,6 +29,7 @@ import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.test.web.servlet.MvcResult;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 import org.springframework.web.context.WebApplicationContext;
 import org.testcontainers.containers.GenericContainer;
@@ -74,6 +77,8 @@ class JobPostingAnalyzeIntegrationTest {
     @Autowired private JobPositionRepository jobPositionRepository;
     @Autowired private JobPostingRepository jobPostingRepository;
     @Autowired private JobPostingAnalysisRepository jobPostingAnalysisRepository;
+    @Autowired private InterviewRepository interviewRepository;
+    @Autowired private InterviewQuestionRepository interviewQuestionRepository;
     @MockitoBean private JobPostingContentFetcher jobPostingContentFetcher;
     @MockitoBean private AiService aiService;
 
@@ -93,6 +98,8 @@ class JobPostingAnalyzeIntegrationTest {
 
     @AfterEach
     void tearDown() {
+        interviewQuestionRepository.deleteAll();
+        interviewRepository.deleteAll();
         jobPostingAnalysisRepository.deleteAll();
         jobPostingRepository.deleteAll();
         jobPositionRepository.deleteAll();
@@ -118,6 +125,73 @@ class JobPostingAnalyzeIntegrationTest {
                 .satisfies(posting -> assertThat(posting.getJobPosition().getId()).isEqualTo(jobPosition.getId()));
         assertThat(jobPostingAnalysisRepository.findAll()).singleElement()
                 .satisfies(analysis -> assertThat(analysis.getRequiredQualifications()).containsExactly("Java"));
+    }
+
+    @Test
+    void analyzeJobPosting_withoutExistingReferences_createsAndReusesNormalizedCompanyAndPosition() throws Exception {
+        jobPositionRepository.deleteAll();
+        companyRepository.deleteAll();
+        given(jobPostingContentFetcher.fetch(anyString()))
+                .willReturn(new FetchedJobPostingContent("Backend role", "Build resilient Java APIs."));
+        given(aiService.analyzeJobPosting(anyString()))
+                .willReturn(analysisResult("Example Corp", "Backend Developer"),
+                        analysisResult("  EXAMPLE   CORP  ", " backend   developer "));
+        given(aiService.generateInterviewQuestions(anyString()))
+                .willReturn(List.of("Q1", "Q2", "Q3", "Q4", "Q5"));
+
+        MvcResult firstAnalysis = requestAnalyzeWithoutPosition("https://example.com/jobs/new-1")
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.data.jobPositionId").isNumber())
+                .andReturn();
+        long jobPostingId = tools.jackson.databind.json.JsonMapper.builder().build()
+                .readTree(firstAnalysis.getResponse().getContentAsString())
+                .at("/data/jobPostingId").asLong();
+
+        MvcResult interviewCreation = mockMvc.perform(post("/api/v1/interviews").header("Authorization", bearer())
+                        .contentType("application/json")
+                        .content("{\"title\":\"New User Interview\",\"jobPostingId\":" + jobPostingId + "}"))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.data.questionCount").value(5))
+                .andReturn();
+        long interviewId = tools.jackson.databind.json.JsonMapper.builder().build()
+                .readTree(interviewCreation.getResponse().getContentAsString())
+                .at("/data/interviewId").asLong();
+
+        requestAnalyzeWithoutPosition("https://example.com/jobs/new-2")
+                .andExpect(status().isCreated());
+
+        assertThat(companyRepository.findAll()).singleElement().satisfies(company -> {
+            assertThat(company.getName()).isEqualTo("Example Corp");
+            assertThat(company.getNormalizedName()).isEqualTo("example corp");
+        });
+        assertThat(jobPositionRepository.findAll()).singleElement().satisfies(position -> {
+            assertThat(position.getName()).isEqualTo("Backend Developer");
+            assertThat(position.getNormalizedName()).isEqualTo("backend developer");
+            assertThat(position.getTechStack()).containsExactly("Java", "Spring Boot");
+        });
+        assertThat(jobPostingRepository.count()).isEqualTo(2);
+        assertThat(interviewRepository.findWithUserAndJobPositionAndCompanyById(interviewId))
+                .hasValueSatisfying(interview -> {
+            assertThat(interview.getJobPosting().getId()).isEqualTo(jobPostingId);
+            assertThat(interview.getJobPosition().getNormalizedName()).isEqualTo("backend developer");
+        });
+    }
+
+    @Test
+    void analyzeJobPosting_withoutCompanyOrPosition_doesNotCreateArbitraryReferences() throws Exception {
+        jobPositionRepository.deleteAll();
+        companyRepository.deleteAll();
+        given(jobPostingContentFetcher.fetch(anyString()))
+                .willReturn(new FetchedJobPostingContent("Unknown role", "Insufficient content"));
+        given(aiService.analyzeJobPosting(anyString())).willReturn(analysisResult(null, null));
+
+        requestAnalyzeWithoutPosition("https://example.com/jobs/unknown")
+                .andExpect(status().isUnprocessableContent())
+                .andExpect(jsonPath("$.code").value("JOB_POSTING_ANALYSIS_INSUFFICIENT"));
+
+        assertThat(companyRepository.count()).isZero();
+        assertThat(jobPositionRepository.count()).isZero();
+        assertThat(jobPostingRepository.count()).isZero();
     }
 
     @Test
@@ -153,8 +227,19 @@ class JobPostingAnalyzeIntegrationTest {
                 .content("{\"jobPositionId\":" + jobPosition.getId() + ",\"postingUrl\":\"https://example.com/jobs/1\"}"));
     }
 
+    private org.springframework.test.web.servlet.ResultActions requestAnalyzeWithoutPosition(String postingUrl)
+            throws Exception {
+        return mockMvc.perform(post("/api/v1/job-postings/analyze").header("Authorization", bearer())
+                .contentType("application/json")
+                .content("{\"postingUrl\":\"" + postingUrl + "\"}"));
+    }
+
     private JobPostingAnalysisResult analysisResult() {
-        return JobPostingAnalysisResult.builder().companyName("Example Corp").positionName("Backend Developer")
+        return analysisResult("Example Corp", "Backend Developer");
+    }
+
+    private JobPostingAnalysisResult analysisResult(String companyName, String positionName) {
+        return JobPostingAnalysisResult.builder().companyName(companyName).positionName(positionName)
                 .responsibilities(List.of("Build APIs")).requiredQualifications(List.of("Java"))
                 .preferredQualifications(List.of()).techStack(List.of("Java", "Spring Boot"))
                 .experienceRequirements(List.of()).keywords(List.of("backend")).summary("Backend role")

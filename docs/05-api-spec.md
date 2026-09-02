@@ -299,7 +299,6 @@ JobPosition이 없으면 `data`는 빈 배열을 반환한다.
 
 ```json
 {
-  "jobPositionId": 1,
   "postingUrl": "https://careers.example.com/jobs/backend-developer"
 }
 ```
@@ -320,6 +319,14 @@ HTML main content extraction
 ↓
 
 AI structured analysis
+
+↓
+
+Resolve or create Company by normalized company name
+
+↓
+
+Resolve or create JobPosition by company + normalized position name
 
 ↓
 
@@ -354,11 +361,15 @@ JobPosting + JobPostingAnalysis snapshot persistence
 
 ---
 
-Each request creates a new immutable snapshot because the source posting can change. A selected JobPosition is never
-automatically changed from AI-extracted company or position information.
+Each request creates a new immutable JobPosting snapshot because the source posting can change. Company names and
+position names are normalized with NFKC, collapsed whitespace, and lowercase comparison. Existing Company and
+JobPosition records are reused; AI analysis never updates an existing reference entity. The legacy `jobPositionId`
+request field remains optional and deprecated for temporary client compatibility.
 
 URL fetch failures return `JOB_POSTING_FETCH_FAILED`; inaccessible or empty posting content returns
 `JOB_POSTING_CONTENT_NOT_FOUND`; disallowed URLs return `JOB_POSTING_URL_NOT_ALLOWED`.
+If the analysis does not contain usable company and position names, `JOB_POSTING_ANALYSIS_INSUFFICIENT` is returned
+and no Company, JobPosition, or JobPosting is saved.
 
 ---
 
@@ -372,21 +383,22 @@ URL fetch failures return `JOB_POSTING_FETCH_FAILED`; inaccessible or empty post
 
 ```json
 {
-  "jobPositionId": 1,
   "jobPostingId": 10,
   "resumeId": 5,
   "title": "Backend Interview"
 }
 ```
 
-`jobPostingId` and `resumeId` are optional. Supported combinations are JobPosition only, JobPosition + JobPosting,
-JobPosition + Resume, and JobPosition + JobPosting + Resume. A posting must belong to `jobPositionId` and have a
-saved analysis. A resume must belong to the authenticated user and have a saved analysis.
+`jobPostingId` is required by the current user-facing contract, and `resumeId` is optional. JobPosition is derived from
+`JobPosting.jobPosition`; clients do not select it directly. The legacy `jobPositionId` field remains optional and
+deprecated for one compatibility window, allowing the previous JobPosition-only flow until removal. If both legacy
+`jobPositionId` and `jobPostingId` are sent, they must resolve to the same JobPosition. A resume must belong to the
+authenticated user and have a saved analysis.
 
 ### Process
 
 ```
-Company + JobPosition + optional JobPostingAnalysis + optional ResumeAnalysis snapshots
+JobPosting + JobPostingAnalysis → JobPosition + Company, with optional ResumeAnalysis snapshot
 
 Question distribution policy (difficulty and category)
 

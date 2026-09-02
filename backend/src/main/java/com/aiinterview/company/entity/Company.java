@@ -7,13 +7,15 @@ import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
 import jakarta.persistence.Table;
+import jakarta.persistence.UniqueConstraint;
 import lombok.AccessLevel;
 import lombok.Builder;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 
 @Entity
-@Table(name = "companies")
+@Table(name = "companies", uniqueConstraints =
+        @UniqueConstraint(name = "uk_companies_normalized_name", columnNames = "normalized_name"))
 @Getter
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
 public class Company extends BaseEntity {
@@ -25,6 +27,9 @@ public class Company extends BaseEntity {
     @Column(nullable = false, length = 100)
     private String name;
 
+    @Column(name = "normalized_name", length = 100)
+    private String normalizedName;
+
     @Column(name = "website_url", length = 255)
     private String websiteUrl;
 
@@ -32,8 +37,9 @@ public class Company extends BaseEntity {
     private String logoUrl;
 
     @Builder
-    private Company(String name, String websiteUrl, String logoUrl) {
+    private Company(String name, String normalizedName, String websiteUrl, String logoUrl) {
         this.name = name;
+        this.normalizedName = normalizedName;
         this.websiteUrl = websiteUrl;
         this.logoUrl = logoUrl;
     }

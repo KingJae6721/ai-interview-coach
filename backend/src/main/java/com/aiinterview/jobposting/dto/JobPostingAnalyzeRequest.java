@@ -1,7 +1,6 @@
 package com.aiinterview.jobposting.dto;
 
 import jakarta.validation.constraints.NotBlank;
-import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Size;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
@@ -10,7 +9,7 @@ import lombok.NoArgsConstructor;
 @NoArgsConstructor
 public class JobPostingAnalyzeRequest {
 
-    @NotNull
+    @Deprecated
     private Long jobPositionId;
 
     @NotBlank

@@ -203,13 +203,13 @@ class InterviewResumeIntegrationTest {
 
     private org.springframework.test.web.servlet.ResultActions performCreate(Long jobPostingId, Long resumeId)
             throws Exception {
+        String positionField = jobPostingId == null ? ",\"jobPositionId\":" + jobPosition.getId() : "";
         String postingField = jobPostingId == null ? "" : ",\"jobPostingId\":" + jobPostingId;
         String resumeField = resumeId == null ? "" : ",\"resumeId\":" + resumeId;
         return mockMvc.perform(post("/api/v1/interviews")
                 .header("Authorization", "Bearer " + ownerToken)
                 .contentType("application/json")
-                .content("{\"jobPositionId\":" + jobPosition.getId() + postingField + resumeField
-                        + ",\"title\":\"Personalized Interview\"}"));
+                .content("{\"title\":\"Personalized Interview\"" + positionField + postingField + resumeField + "}"));
     }
 
     private void assertRelations(long interviewId, Long expectedJobPostingId, Long expectedResumeId) {

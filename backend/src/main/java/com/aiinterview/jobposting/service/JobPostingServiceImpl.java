@@ -26,7 +26,7 @@ public class JobPostingServiceImpl implements JobPostingService {
     @Override
     @Transactional(propagation = Propagation.NOT_SUPPORTED)
     public JobPostingAnalyzeResponse analyzeJobPosting(JobPostingAnalyzeRequest request) {
-        if (!jobPositionRepository.existsById(request.getJobPositionId())) {
+        if (request.getJobPositionId() != null && !jobPositionRepository.existsById(request.getJobPositionId())) {
             throw new BusinessException(ErrorCode.JOB_POSITION_NOT_FOUND);
         }
 

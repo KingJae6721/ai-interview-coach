@@ -16,9 +16,19 @@ import java.time.Duration;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 @Slf4j
 abstract class AbstractOpenAiCompatibleProvider implements AiProvider {
+
+    private static final int MAX_PROVIDER_ERROR_MESSAGE_LENGTH = 500;
+    private static final Pattern ERROR_MESSAGE_PATTERN = Pattern.compile(
+            "\\\"message\\\"\\s*:\\s*\\\"((?:\\\\.|[^\\\"\\\\])*)\\\"");
+    private static final Pattern EMAIL_PATTERN = Pattern.compile(
+            "(?i)\\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\\.[A-Z]{2,}\\b");
+    private static final Pattern PHONE_PATTERN = Pattern.compile(
+            "(?<![\\p{L}\\d])(?:\\+?\\d{1,3}[\\s.-]?)?(?:\\(?\\d{2,4}\\)?[\\s.-]?){2,4}\\d{3,4}(?![\\p{L}\\d])");
 
     private final RestClient restClient;
     private final String apiKey;
@@ -66,8 +76,9 @@ abstract class AbstractOpenAiCompatibleProvider implements AiProvider {
                     .retrieve()
                     .body(String.class);
         } catch (RestClientResponseException e) {
-            log.error("AI provider request failed. provider={}, reason={}, status={}", providerName,
-                    toFailureReason(e.getStatusCode().value()), e.getStatusCode());
+            log.error("AI provider request failed. provider={}, model={}, reason={}, status={}, providerMessage={}",
+                    providerName, model, toFailureReason(e.getStatusCode().value()), e.getStatusCode(),
+                    extractProviderErrorMessage(e.getResponseBodyAsString()));
             throw new BusinessException(ErrorCode.AI_REQUEST_FAILED);
         } catch (ResourceAccessException e) {
             log.error("AI provider request failed. provider={}, reason={}", providerName,
@@ -107,5 +118,22 @@ abstract class AbstractOpenAiCompatibleProvider implements AiProvider {
             current = current.getCause();
         }
         return false;
+    }
+
+    private String extractProviderErrorMessage(String responseBody) {
+        if (!StringUtils.hasText(responseBody)) {
+            return "UNAVAILABLE";
+        }
+        Matcher matcher = ERROR_MESSAGE_PATTERN.matcher(responseBody);
+        String message = matcher.find() ? matcher.group(1) : "UNAVAILABLE";
+        if (StringUtils.hasText(apiKey)) {
+            message = message.replace(apiKey, "[REDACTED]");
+        }
+        message = EMAIL_PATTERN.matcher(message).replaceAll("[REDACTED]");
+        message = PHONE_PATTERN.matcher(message).replaceAll("[REDACTED]");
+        message = message.replaceAll("[\\r\\n\\t]+", " ");
+        return message.length() > MAX_PROVIDER_ERROR_MESSAGE_LENGTH
+                ? message.substring(0, MAX_PROVIDER_ERROR_MESSAGE_LENGTH)
+                : message;
     }
 }

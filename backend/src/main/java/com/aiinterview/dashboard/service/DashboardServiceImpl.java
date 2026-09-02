@@ -63,8 +63,11 @@ public class DashboardServiceImpl implements DashboardService {
     @Override
     @Transactional(readOnly = true)
     public List<DashboardAnalyticsResponse> getAnalytics(Long userId, DashboardAnalyticsPeriod period, int limit) {
-        List<DashboardAnalyticsProjection> analytics = new ArrayList<>(interviewRepository
-                .findDashboardAnalyticsByUserId(userId, period.getDateTruncUnit(), PageRequest.of(0, limit)));
+        PageRequest pageRequest = PageRequest.of(0, limit);
+        List<DashboardAnalyticsProjection> analytics = new ArrayList<>(switch (period) {
+            case WEEKLY -> interviewRepository.findWeeklyDashboardAnalyticsByUserId(userId, pageRequest);
+            case MONTHLY -> interviewRepository.findMonthlyDashboardAnalyticsByUserId(userId, pageRequest);
+        });
 
         Collections.reverse(analytics);
 

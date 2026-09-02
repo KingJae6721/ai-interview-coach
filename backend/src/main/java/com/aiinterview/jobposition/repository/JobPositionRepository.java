@@ -14,4 +14,8 @@ public interface JobPositionRepository extends JpaRepository<JobPosition, Long> 
 
     @Query("select jobPosition from JobPosition jobPosition join fetch jobPosition.company where jobPosition.id = :jobPositionId")
     Optional<JobPosition> findWithCompanyById(Long jobPositionId);
+
+    Optional<JobPosition> findFirstByCompanyIdAndNormalizedName(Long companyId, String normalizedName);
+
+    List<JobPosition> findAllByCompanyIdOrderByIdAsc(Long companyId);
 }
