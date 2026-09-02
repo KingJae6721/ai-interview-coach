@@ -8,6 +8,7 @@ import {
   useRef,
   useState,
   type FormEvent,
+  type KeyboardEvent,
 } from "react";
 
 import { getErrorMessage } from "@/features/auth/lib/get-error-message";
@@ -21,7 +22,10 @@ import {
   startInterview,
   submitInterviewAnswer,
 } from "@/features/interview/services/interview-service";
-import type { InterviewProgressResponse } from "@/features/interview/types/interview";
+import type {
+  InterviewProgressQuestionResponse,
+  InterviewProgressResponse,
+} from "@/features/interview/types/interview";
 import { ApiError } from "@/services/api-client";
 
 interface InterviewProgressProps {
@@ -45,6 +49,22 @@ const DIFFICULTY_LABELS: Record<string, string> = {
   MEDIUM: "보통",
   HARD: "어려움",
 };
+
+function getQuestionDisplayNumber(
+  question: InterviewProgressQuestionResponse,
+  questions: InterviewProgressQuestionResponse[],
+): string {
+  const rootQuestions = questions
+    .filter(({ parentQuestionId }) => parentQuestionId === null)
+    .sort((first, second) => first.questionOrder - second.questionOrder);
+  const rootQuestionId = question.parentQuestionId ?? question.questionId;
+  const rootIndex = rootQuestions.findIndex(
+    ({ questionId }) => questionId === rootQuestionId,
+  );
+  const rootNumber = String(rootIndex + 1);
+
+  return question.parentQuestionId === null ? rootNumber : `${rootNumber}-1`;
+}
 
 function getInterviewErrorMessage(error: unknown): string {
   if (error instanceof ApiError) {
@@ -84,6 +104,7 @@ export function InterviewProgress({ interviewId }: InterviewProgressProps) {
   const isStartingRef = useRef(false);
   const isCancellingRef = useRef(false);
   const isGeneratingPartialFeedbackRef = useRef(false);
+  const isComposingRef = useRef(false);
   const hasRenderedConversationRef = useRef(false);
   const highlightTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [loadState, setLoadState] = useState<LoadState>("loading");
@@ -100,6 +121,8 @@ export function InterviewProgress({ interviewId }: InterviewProgressProps) {
   >(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isGeneratingFollowUp, setIsGeneratingFollowUp] = useState(false);
+  const [isAdvancingQuestion, setIsAdvancingQuestion] = useState(false);
+  const [needsProgressRefresh, setNeedsProgressRefresh] = useState(false);
   const [isCompleting, setIsCompleting] = useState(false);
   const [isStarting, setIsStarting] = useState(false);
   const [isCancelling, setIsCancelling] = useState(false);
@@ -235,7 +258,9 @@ export function InterviewProgress({ interviewId }: InterviewProgressProps) {
       !currentQuestion ||
       isSubmitting ||
       isGeneratingFollowUp ||
-      pendingFollowUpQuestionId !== null
+      pendingFollowUpQuestionId !== null ||
+      isAdvancingQuestion ||
+      needsProgressRefresh
     ) {
       return;
     }
@@ -247,6 +272,7 @@ export function InterviewProgress({ interviewId }: InterviewProgressProps) {
     }
 
     setIsSubmitting(true);
+    setIsAdvancingQuestion(true);
     setSubmitErrorMessage("");
     setFollowUpMessage("");
     setFollowUpErrorMessage("");
@@ -256,14 +282,33 @@ export function InterviewProgress({ interviewId }: InterviewProgressProps) {
         answerContent: normalizedAnswer,
       });
       setAnswer("");
-      setProgress(await getInterviewProgress(interviewId));
+      setProgress((currentProgress) =>
+        currentProgress === null
+          ? null
+          : {
+              ...currentProgress,
+              questions: currentProgress.questions.map((question) =>
+                question.questionId === currentQuestion.questionId
+                  ? {
+                      ...question,
+                      answerContent: normalizedAnswer,
+                      answeredAt: new Date().toISOString(),
+                    }
+                  : question,
+              ),
+            },
+      );
 
       if (currentQuestion.parentQuestionId === null) {
         setPendingFollowUpQuestionId(currentQuestion.questionId);
         await requestFollowUp(currentQuestion.questionId);
+        return;
       }
+
+      await refreshProgressAfterTransition();
     } catch (error) {
       setSubmitErrorMessage(getInterviewErrorMessage(error));
+      setIsAdvancingQuestion(false);
     } finally {
       setIsSubmitting(false);
     }
@@ -316,33 +361,67 @@ export function InterviewProgress({ interviewId }: InterviewProgressProps) {
     }
   }
 
+  async function refreshProgressAfterTransition(): Promise<boolean> {
+    try {
+      setProgress(await getInterviewProgress(interviewId));
+      setNeedsProgressRefresh(false);
+      setSubmitErrorMessage("");
+      return true;
+    } catch (error) {
+      setNeedsProgressRefresh(true);
+      setSubmitErrorMessage(
+        `진행 상태를 갱신하지 못했습니다. ${getInterviewErrorMessage(error)}`,
+      );
+      return false;
+    } finally {
+      setIsAdvancingQuestion(false);
+    }
+  }
+
+  async function handleProgressRefresh() {
+    if (await refreshProgressAfterTransition()) {
+      setPendingFollowUpQuestionId(null);
+    }
+  }
+
   async function requestFollowUp(questionId: number) {
+    setIsAdvancingQuestion(true);
     setIsGeneratingFollowUp(true);
     setFollowUpErrorMessage("");
 
     try {
       const followUp = await generateFollowUpQuestion(questionId);
-      setPendingFollowUpQuestionId(null);
       setFollowUpMessage(
         followUp.followUpQuestionId !== null
           ? `꼬리질문이 등록되었습니다: ${followUp.content}`
           : "추가 꼬리질문 없이 다음 질문으로 진행합니다.",
       );
+      if (await refreshProgressAfterTransition()) {
+        setPendingFollowUpQuestionId(null);
+      }
     } catch (error) {
       setFollowUpErrorMessage(
         `답변은 저장됐지만 꼬리질문 생성에 실패했습니다. ${getInterviewErrorMessage(error)}`,
       );
     } finally {
-      try {
-        const refreshedProgress = await getInterviewProgress(interviewId);
-        setProgress(refreshedProgress);
-      } catch (error) {
-        setSubmitErrorMessage(
-          `진행 상태를 갱신하지 못했습니다. ${getInterviewErrorMessage(error)}`,
-        );
-      }
       setIsGeneratingFollowUp(false);
+      setIsAdvancingQuestion(false);
     }
+  }
+
+  function handleAnswerKeyDown(event: KeyboardEvent<HTMLTextAreaElement>) {
+    if (
+      event.key !== "Enter" ||
+      event.shiftKey ||
+      event.repeat ||
+      event.nativeEvent.isComposing ||
+      isComposingRef.current
+    ) {
+      return;
+    }
+
+    event.preventDefault();
+    event.currentTarget.form?.requestSubmit();
   }
 
   async function handleComplete() {
@@ -612,6 +691,10 @@ export function InterviewProgress({ interviewId }: InterviewProgressProps) {
                   question.questionId === progress.nextQuestionId;
                 const isHighlighted =
                   question.questionId === highlightedQuestionId;
+                const displayNumber = getQuestionDisplayNumber(
+                  question,
+                  progress.questions,
+                );
 
                 return (
                   <article
@@ -634,7 +717,7 @@ export function InterviewProgress({ interviewId }: InterviewProgressProps) {
                       >
                         <div className="flex flex-wrap items-center gap-1.5 text-[11px] font-medium">
                           <span className="text-zinc-500">
-                            질문 {question.questionOrder}
+                            질문 {displayNumber}
                           </span>
                           {isCurrent && (
                             <span className="rounded-full bg-zinc-900 px-2 py-0.5 text-white">
@@ -735,7 +818,7 @@ export function InterviewProgress({ interviewId }: InterviewProgressProps) {
                   className="block text-sm font-medium text-zinc-700"
                 >
                   {currentQuestion
-                    ? `질문 ${currentQuestion.questionOrder} 답변`
+                    ? `질문 ${getQuestionDisplayNumber(currentQuestion, progress.questions)} 답변`
                     : "현재 질문 답변"}
                 </label>
                 <div className="mt-2 flex flex-col gap-3 sm:flex-row sm:items-end">
@@ -746,11 +829,20 @@ export function InterviewProgress({ interviewId }: InterviewProgressProps) {
                       setAnswer(event.target.value);
                       setSubmitErrorMessage("");
                     }}
+                    onCompositionStart={() => {
+                      isComposingRef.current = true;
+                    }}
+                    onCompositionEnd={() => {
+                      isComposingRef.current = false;
+                    }}
+                    onKeyDown={handleAnswerKeyDown}
                     disabled={
                       !currentQuestion ||
                       isSubmitting ||
                       isGeneratingFollowUp ||
-                      pendingFollowUpQuestionId !== null
+                      pendingFollowUpQuestionId !== null ||
+                      isAdvancingQuestion ||
+                      needsProgressRefresh
                     }
                     rows={3}
                     placeholder={
@@ -766,29 +858,43 @@ export function InterviewProgress({ interviewId }: InterviewProgressProps) {
                       !currentQuestion ||
                       isSubmitting ||
                       isGeneratingFollowUp ||
-                      pendingFollowUpQuestionId !== null
+                      pendingFollowUpQuestionId !== null ||
+                      isAdvancingQuestion ||
+                      needsProgressRefresh
                     }
                     className="h-12 shrink-0 rounded-xl bg-zinc-900 px-5 font-medium text-white hover:bg-zinc-700 disabled:cursor-not-allowed disabled:opacity-50 sm:h-24"
                   >
-                    {isSubmitting
-                      ? isGeneratingFollowUp
-                        ? "꼬리질문 생성 중..."
+                    {isSubmitting || isAdvancingQuestion
+                      ? isGeneratingFollowUp || isAdvancingQuestion
+                        ? "다음 질문 준비 중..."
                         : "답변 제출 중..."
                       : "답변 제출"}
                   </button>
                 </div>
+                <p className="mt-2 text-xs text-zinc-500">
+                  Enter로 제출 · Shift + Enter로 줄바꿈
+                </p>
               </form>
             )}
 
-            {isGeneratingFollowUp && (
+            {isAdvancingQuestion && (
               <p role="status" className="mt-3 text-sm text-blue-700">
-                답변을 바탕으로 다음 질문을 준비하고 있습니다...
+                답변을 바탕으로 다음 질문을 준비하고 있습니다.
               </p>
             )}
             {submitErrorMessage && (
               <p role="alert" className="mt-3 text-sm text-red-600">
                 {submitErrorMessage}
               </p>
+            )}
+            {needsProgressRefresh && (
+              <button
+                type="button"
+                onClick={() => void handleProgressRefresh()}
+                className="mt-3 rounded-lg bg-red-700 px-4 py-2 font-medium text-white hover:bg-red-600"
+              >
+                진행 상태 다시 불러오기
+              </button>
             )}
             {followUpMessage && (
               <p role="status" className="mt-3 text-sm text-blue-700">
