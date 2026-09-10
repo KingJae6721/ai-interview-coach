@@ -115,6 +115,33 @@ class QuestionEvaluationServiceImplTest {
     }
 
     @Test
+    void evaluateMissing_resumesFromMissingEvaluationAfterPartialAiFailure() {
+        InterviewAnswer firstAnswer = answer(1L, 10L, "question 1", "answer 1");
+        InterviewAnswer secondAnswer = answer(2L, 10L, "question 2", "answer 2");
+        QuestionEvaluationResult result = evaluationResult();
+        given(questionEvaluationRepository.findEvaluatedAnswerIdsByAnswerIdIn(List.of(1L, 2L)))
+                .willReturn(Set.of())
+                .willReturn(Set.of(1L));
+        given(interviewAnswerRepository.findAllWithQuestionInterviewAndUserByIdIn(List.of(1L, 2L)))
+                .willReturn(List.of(firstAnswer, secondAnswer));
+        given(interviewAnswerRepository.findAllWithQuestionInterviewAndUserByIdIn(List.of(2L)))
+                .willReturn(List.of(secondAnswer));
+        given(aiService.evaluateQuestionAnswer(any()))
+                .willReturn(result)
+                .willThrow(new BusinessException(ErrorCode.AI_REQUEST_FAILED))
+                .willReturn(result);
+
+        assertThatThrownBy(() -> questionEvaluationService.evaluateMissing(10L, List.of(1L, 2L)))
+                .isInstanceOf(BusinessException.class);
+
+        questionEvaluationService.evaluateMissing(10L, List.of(1L, 2L));
+
+        then(questionEvaluationPersistenceService).should(times(1)).save(1L, result);
+        then(questionEvaluationPersistenceService).should(times(1)).save(2L, result);
+        then(aiService).should(times(3)).evaluateQuestionAnswer(any());
+    }
+
+    @Test
     void evaluateMissing_rejectsAnswerOwnedByAnotherUserBeforeAiCall() {
         InterviewAnswer answer = answer(1L, 20L, "question", "answer");
         given(questionEvaluationRepository.findEvaluatedAnswerIdsByAnswerIdIn(List.of(1L)))

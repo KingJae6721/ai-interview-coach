@@ -9,54 +9,35 @@ public final class QuestionEvaluationPromptBuilder {
 
     public static String buildSystemPrompt() {
         return """
-                You are a calibrated interview-answer evaluator.
-
-                First decide whether the candidate gave an answer that can actually be evaluated.
-                Set sufficient=false when the response does not substantively answer the question, is meaningless,
-                is unrelated, or only says that the candidate does not know. Do not award token partial credit in
-                these cases. When sufficient=false, every criterion score must be 0.
-
-                A short answer can still be sufficient when it directly and correctly answers the question. Never
-                use character count alone. Evaluate only what the question asks. Do not penalize a technical answer
-                merely because it has no personal experience example unless the question explicitly requests one.
-
-                Apply this same 0-100 anchor to every criterion:
-                0 = no substantive answer;
-                1-20 = extremely limited but relevant content;
-                21-40 = partial answer with major omissions;
-                41-60 = basic answer lacking accuracy, specificity, or support;
-                61-80 = appropriate and sufficiently supported answer;
-                81-90 = accurate, specific, logical, and strong answer;
-                91-100 = exceptionally complete, deep, and well-supported answer.
-
-                Keep criterion scores deterministic for identical input. Textual feedback must agree with the scores.
-                Write every textual field in Korean and do not invent facts not supported by the answer.
+                Evaluate one interview answer using only the supplied question, answer, category, difficulty, and rubric.
+                sufficient=false for meaningless, unrelated, no-knowledge, or non-responsive answers; then all scores=0.
+                Short but substantively correct answers can be sufficient; never judge by length alone.
+                Do not require experience unless the question asks for it or the rubric contains it.
+                Difficulty sets expected depth only; do not introduce requirements unrelated to the question.
+                Score anchor: 0 none; 1-20 extremely limited; 21-40 major omissions; 41-60 basic but weak;
+                61-80 sufficient; 81-90 strong; 91-100 exceptional.
+                Be deterministic, keep feedback consistent with scores, use Korean, and invent no facts.
                 """;
     }
 
     public static String buildUserPrompt(QuestionEvaluationRequest request) {
         String rubric = QuestionEvaluationPolicy.criteria(request.getCategory()).stream()
-                .map(criterion -> "- %s (%d%%): %s".formatted(
+                .map(criterion -> "%s|%d|%s".formatted(
                         criterion.key(), criterion.weight(), criterion.description()))
-                .collect(java.util.stream.Collectors.joining("\n"));
+                .collect(java.util.stream.Collectors.joining(";"));
 
         return """
-                Question category: %s
-                Question difficulty: %s
-                Question: %s
-                Candidate answer: %s
-
-                Category rubric:
-                %s
-
-                Evaluate only with the listed criteria. Difficulty controls the expected depth, not whether unrelated
-                requirements should be introduced. If sufficient=false, explain why the answer cannot be evaluated.
+                category=%s
+                difficulty=%s
+                rubric=key|weightPercent|criterion:%s
+                question=%s
+                answer=%s
                 """.formatted(
                 request.getCategory() == null ? "UNSPECIFIED" : request.getCategory(),
                 request.getDifficulty(),
+                rubric,
                 request.getQuestionContent(),
-                request.getAnswerContent(),
-                rubric
+                request.getAnswerContent()
         );
     }
 }

@@ -34,6 +34,8 @@ import java.util.Optional;
 public class OpenAiServiceImpl implements AiService {
 
     private static final int QUESTION_COUNT = 5;
+    private static final int FEEDBACK_MAX_COMPLETION_TOKENS = 768;
+    private static final int EVALUATION_MAX_COMPLETION_TOKENS = 640;
     private static final String INSUFFICIENT_STRENGTHS = "실질적인 강점을 확인할 수 없습니다.";
     private static final String INSUFFICIENT_WEAKNESSES = "질문에 대한 평가 가능한 답변이 제공되지 않았습니다.";
     private static final String INSUFFICIENT_IMPROVEMENT =
@@ -86,7 +88,7 @@ public class OpenAiServiceImpl implements AiService {
         try {
             String responseBody = aiProvider.complete(new AiCompletionRequest(
                     FeedbackPromptBuilder.buildSystemPrompt(), FeedbackPromptBuilder.buildUserPrompt(request),
-                    feedbackResponseFormat()));
+                    feedbackResponseFormat(), FEEDBACK_MAX_COMPLETION_TOKENS));
 
             return extractFeedback(responseBody);
         } catch (JacksonException e) {
@@ -105,7 +107,7 @@ public class OpenAiServiceImpl implements AiService {
             String responseBody = aiProvider.complete(new AiCompletionRequest(
                     QuestionEvaluationPromptBuilder.buildSystemPrompt(),
                     QuestionEvaluationPromptBuilder.buildUserPrompt(request),
-                    questionEvaluationResponseFormat(request)));
+                    questionEvaluationResponseFormat(request), EVALUATION_MAX_COMPLETION_TOKENS));
 
             return extractQuestionEvaluation(responseBody, request);
         } catch (JacksonException e) {

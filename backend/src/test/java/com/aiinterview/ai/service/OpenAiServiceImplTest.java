@@ -85,6 +85,10 @@ class OpenAiServiceImplTest {
                 .interviewTitle("title")
                 .questionAnswers(List.of())
                 .build()).getOverallScore()).isEqualTo(90);
+
+        ArgumentCaptor<AiCompletionRequest> requestCaptor = ArgumentCaptor.forClass(AiCompletionRequest.class);
+        then(aiProvider).should().complete(requestCaptor.capture());
+        assertThat(requestCaptor.getValue().maxCompletionTokens()).isEqualTo(768);
     }
 
     @Test
@@ -179,9 +183,10 @@ class OpenAiServiceImplTest {
         assertThat(result.getScore()).isEqualTo(88);
         ArgumentCaptor<AiCompletionRequest> requestCaptor = ArgumentCaptor.forClass(AiCompletionRequest.class);
         then(aiProvider).should().complete(requestCaptor.capture());
-        assertThat(requestCaptor.getValue().systemPrompt()).contains("unless the question explicitly requests one");
+        assertThat(requestCaptor.getValue().systemPrompt()).contains("Do not require experience unless the question asks");
         assertThat(requestCaptor.getValue().userPrompt())
-                .contains("Question category: CS", "Question difficulty: MEDIUM", "technicalAccuracy");
+                .contains("category=CS", "difficulty=MEDIUM", "technicalAccuracy");
+        assertThat(requestCaptor.getValue().maxCompletionTokens()).isEqualTo(640);
         assertThat(requestCaptor.getValue().responseFormat().toString())
                 .contains("sufficient", "criteria", "technicalAccuracy")
                 .doesNotContain("score=");
@@ -230,7 +235,7 @@ class OpenAiServiceImplTest {
         assertThat(result.getScore()).isEqualTo(70);
         ArgumentCaptor<AiCompletionRequest> requestCaptor = ArgumentCaptor.forClass(AiCompletionRequest.class);
         then(aiProvider).should().complete(requestCaptor.capture());
-        assertThat(requestCaptor.getValue().userPrompt()).contains("Question category: UNSPECIFIED");
+        assertThat(requestCaptor.getValue().userPrompt()).contains("category=UNSPECIFIED");
     }
 
     @Test

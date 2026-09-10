@@ -5,9 +5,8 @@ import com.aiinterview.ai.dto.InterviewFeedbackRequest;
 public final class FeedbackPromptBuilder {
 
     private static final String SYSTEM_PROMPT = """
-            You are an expert technical interview coach. Evaluate the supplied interview answers objectively.
-            Return feedback in Korean. Score overallScore from 0 to 100.
-            strengths, weaknesses, improvementSuggestions, and summary must each be concise but actionable text.
+            Evaluate only the supplied interview answers. Return concise, actionable Korean feedback.
+            Score overallScore 0-100. Do not infer facts or performance from unanswered questions.
             """;
 
     private FeedbackPromptBuilder() {
@@ -18,28 +17,24 @@ public final class FeedbackPromptBuilder {
     }
 
     public static String buildUserPrompt(InterviewFeedbackRequest request) {
-        StringBuilder prompt = new StringBuilder("Interview title: ")
+        StringBuilder prompt = new StringBuilder("title=")
                 .append(request.getInterviewTitle())
-                .append("\nFeedback type: ")
+                .append("\ntype=")
                 .append(request.isPartial() ? "partial" : "complete")
-                .append("\nAnswered questions: ")
+                .append("\nanswered=")
                 .append(request.getAnsweredCount())
-                .append(" / ")
+                .append('/')
                 .append(request.getTotalQuestionCount())
-                .append("\n\nQuestion and answer records:\n");
-
-        if (request.isPartial()) {
-            prompt.append("This is partial feedback. Do not infer performance from unanswered questions.\n\n");
-        }
+                .append("\nrecords:\n");
 
         for (InterviewFeedbackRequest.QuestionAnswer questionAnswer : request.getQuestionAnswers()) {
-            prompt.append("[Question ")
+            prompt.append("Q")
                     .append(questionAnswer.getQuestionOrder())
-                    .append("] ")
+                    .append(':')
                     .append(questionAnswer.getQuestionContent())
-                    .append("\n[Answer] ")
+                    .append("\nA:")
                     .append(questionAnswer.getAnswerContent())
-                    .append("\n\n");
+                    .append('\n');
         }
 
         return prompt.toString();

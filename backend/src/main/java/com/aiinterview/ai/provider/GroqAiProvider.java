@@ -12,7 +12,11 @@ public class GroqAiProvider extends AbstractOpenAiCompatibleProvider {
             @Value("${ai.groq.base-url:https://api.groq.com/openai/v1}") String baseUrl,
             @Value("${ai.groq.api-key:}") String apiKey,
             @Value("${ai.groq.model:openai/gpt-oss-20b}") String model,
-            @Value("${ai.timeout-seconds:30}") long timeoutSeconds) {
-        super("groq", baseUrl, apiKey, model, timeoutSeconds);
+            @Value("${ai.timeout-seconds:30}") long timeoutSeconds,
+            @Value("${ai.rate-limit.max-retries:2}") int maxRateLimitRetries,
+            @Value("${ai.rate-limit.initial-backoff-millis:1000}") long initialBackoffMillis,
+            @Value("${ai.rate-limit.max-backoff-millis:60000}") long maxBackoffMillis) {
+        super("groq", baseUrl, apiKey, model, timeoutSeconds, maxRateLimitRetries,
+                initialBackoffMillis, maxBackoffMillis);
     }
 }
