@@ -417,7 +417,9 @@ associated JobPosting in one query and never returns another user's postings.
 }
 ```
 
-`jobPostingId` is required by the current user-facing contract, and `resumeId` is optional. JobPosition is derived from
+`jobPostingId` is required by the current user-facing contract, and `resumeId` is optional. `title` is optional; when
+omitted or blank, the server generates `{companyName} {positionName} {맞춤/모의 면접} #{N}` using the authenticated
+user's existing interview count for that JobPosting. JobPosition is derived from
 `JobPosting.jobPosition`; clients do not select it directly and `jobPositionId` is not accepted as a creation context.
 A resume must belong to the authenticated user and have a saved analysis. The derived JobPosition is also persisted on
 Interview for compatibility with History, Result, and Dashboard queries.
