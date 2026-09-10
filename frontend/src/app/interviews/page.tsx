@@ -24,15 +24,7 @@ export default function InterviewHistoryPage() {
                 지난 면접의 진행 상태와 결과를 확인하세요.
               </p>
             </div>
-            <div className="flex items-center gap-3">
-              <Link
-                href="/interviews/new"
-                className="rounded-lg bg-zinc-900 px-4 py-2.5 text-sm font-medium text-white hover:bg-zinc-700"
-              >
-                새 면접 만들기
-              </Link>
-              <AuthStatus showInterviewCta={false} />
-            </div>
+            <AuthStatus compact interviewCtaLabel="새 면접 만들기" />
           </header>
 
           <section className="mt-6">

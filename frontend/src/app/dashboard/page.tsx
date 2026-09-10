@@ -22,7 +22,7 @@ export default function DashboardPage() {
                 대시보드
               </h1>
             </div>
-            <AuthStatus />
+            <AuthStatus showDashboardCta={false} />
           </header>
 
           <DashboardSummary />
