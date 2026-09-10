@@ -30,6 +30,7 @@ const MAX_RESUME_FILE_SIZE = 5 * 1024 * 1024;
 type LoadState = "loading" | "success" | "error";
 type AnalysisState = "idle" | "loading" | "success" | "error";
 type PostingMode = "existing" | "new";
+type ResumeMode = "none" | "existing" | "upload";
 type SelectedJobPosting = JobPostingSummaryResponse | JobPostingAnalyzeResponse;
 
 function getPersonalizationErrorMessage(error: unknown): string {
@@ -130,6 +131,7 @@ export function InterviewCreateForm() {
   const [resumes, setResumes] = useState<ResumeSummaryResponse[]>([]);
   const [resumeLoadState, setResumeLoadState] = useState<LoadState>("loading");
   const [resumeLoadError, setResumeLoadError] = useState("");
+  const [resumeMode, setResumeMode] = useState<ResumeMode>("none");
   const [selectedResumeId, setSelectedResumeId] = useState<number | null>(null);
   const [uploadedResume, setUploadedResume] =
     useState<ResumeAnalyzeResponse | null>(null);
@@ -174,10 +176,12 @@ export function InterviewCreateForm() {
   }, [loadJobPostings, loadResumes]);
 
   const selectedResume =
-    uploadedResume?.resumeId === selectedResumeId
+    resumeMode === "upload" && uploadedResume?.resumeId === selectedResumeId
       ? uploadedResume
-      : (resumes.find((resume) => resume.resumeId === selectedResumeId) ??
-        null);
+      : resumeMode === "existing"
+        ? (resumes.find((resume) => resume.resumeId === selectedResumeId) ??
+          null)
+        : null;
   const isBusy =
     isCreating || postingState === "loading" || resumeState === "loading";
   const personalizationMessage = selectedPosting
@@ -266,6 +270,7 @@ export function InterviewCreateForm() {
       const response = await analyzeResume(selectedFile);
       setUploadedResume(response);
       setSelectedResumeId(response.resumeId);
+      setResumeMode("upload");
       setSelectedFile(null);
       setResumeState("success");
       setResumes((current) => [
@@ -288,10 +293,6 @@ export function InterviewCreateForm() {
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (isCreatingRef.current) return;
-    if (!title.trim()) {
-      setCreateError("면접 제목을 입력해 주세요.");
-      return;
-    }
     if (!selectedPosting) {
       setCreateError("채용공고를 선택하거나 분석해 주세요.");
       return;
@@ -301,8 +302,8 @@ export function InterviewCreateForm() {
     setCreateError("");
     try {
       const response = await createInterview({
-        title: title.trim(),
         jobPostingId: selectedPosting.jobPostingId,
+        ...(title.trim() ? { title: title.trim() } : {}),
         ...(selectedResumeId ? { resumeId: selectedResumeId } : {}),
       });
       router.push(`/interviews/${response.interviewId}`);
@@ -330,7 +331,7 @@ export function InterviewCreateForm() {
             htmlFor="title"
             className="block text-sm font-medium text-zinc-700"
           >
-            면접 제목
+            면접 제목 <span className="font-normal text-zinc-500">(선택)</span>
           </label>
           <input
             id="title"
@@ -338,10 +339,12 @@ export function InterviewCreateForm() {
             onChange={(event) => setTitle(event.target.value)}
             maxLength={100}
             disabled={isBusy}
-            placeholder="Java 백엔드 면접 연습"
+            placeholder="비워 두면 자동으로 제목과 회차를 생성합니다"
             className="mt-2 w-full rounded-lg border border-zinc-300 px-3 py-2.5 outline-none focus:border-zinc-900 focus:ring-2 focus:ring-zinc-200 disabled:bg-zinc-100"
           />
-          <p className="mt-1.5 text-xs text-zinc-500">최대 100자</p>
+          <p className="mt-1.5 text-xs text-zinc-500">
+            최대 100자 · 예: 회사명 직무명 맞춤 면접 #1
+          </p>
         </div>
       </section>
       <section className="border-t border-zinc-200 pt-8">
@@ -518,106 +521,145 @@ export function InterviewCreateForm() {
           <label className="flex items-center gap-2 text-sm">
             <input
               type="radio"
-              checked={selectedResumeId === null}
+              checked={resumeMode === "none"}
               onChange={() => {
+                setResumeMode("none");
                 setSelectedResumeId(null);
                 setUploadedResume(null);
               }}
             />
             사용하지 않음
           </label>
-          {resumeLoadState === "loading" && (
-            <p className="text-sm text-zinc-500">
-              기존 이력서를 불러오는 중입니다.
-            </p>
-          )}
-          {resumeLoadState === "error" && (
-            <div className="text-sm text-red-600">
-              <p>{resumeLoadError}</p>
-              <button
-                type="button"
-                onClick={() => void loadResumes()}
-                className="mt-2 underline"
-              >
-                다시 시도
-              </button>
-            </div>
-          )}
-          {resumes.map((resume) => (
-            <label
-              key={resume.resumeId}
-              className="block rounded-xl border border-zinc-200 p-4"
-            >
-              <span className="flex items-start gap-2">
-                <input
-                  type="radio"
-                  checked={selectedResumeId === resume.resumeId}
-                  onChange={() => {
-                    setSelectedResumeId(resume.resumeId);
-                    if (uploadedResume?.resumeId !== resume.resumeId)
-                      setUploadedResume(null);
-                  }}
-                />
-                <span>
-                  <span className="block font-medium text-zinc-900">
-                    {resume.originalFileName}
-                  </span>
-                  <span className="mt-1 block text-xs text-zinc-500">
-                    {formatDate(resume.createdAt)}
-                  </span>
-                  <span className="mt-2 block text-sm text-zinc-600">
-                    {resume.summary}
-                  </span>
-                  <TagList values={resume.skills} />
-                </span>
-              </span>
-            </label>
-          ))}
-        </fieldset>
-        <div className="mt-5 rounded-xl border border-dashed border-zinc-300 bg-zinc-50 p-4 sm:p-5">
-          <label
-            htmlFor="resumeFile"
-            className="block text-sm font-medium text-zinc-700"
-          >
+          <label className="flex items-center gap-2 text-sm">
+            <input
+              type="radio"
+              checked={resumeMode === "existing"}
+              onChange={() => {
+                setResumeMode("existing");
+                setSelectedResumeId(null);
+                setUploadedResume(null);
+              }}
+            />
+            기존 이력서 선택
+          </label>
+          <label className="flex items-center gap-2 text-sm">
+            <input
+              type="radio"
+              checked={resumeMode === "upload"}
+              onChange={() => {
+                setResumeMode("upload");
+                setSelectedResumeId(uploadedResume?.resumeId ?? null);
+              }}
+            />
             새 PDF 이력서 업로드
           </label>
-          <input
-            id="resumeFile"
-            type="file"
-            accept="application/pdf,.pdf"
-            disabled={isBusy}
-            onChange={(event) =>
-              handleFileChange(event.target.files?.[0] ?? null)
-            }
-            className="mt-3 block w-full text-sm text-zinc-600 file:mr-4 file:rounded-lg file:border-0 file:bg-zinc-900 file:px-3 file:py-2 file:text-sm file:font-medium file:text-white"
-          />
-          {selectedFile && (
-            <div className="mt-3 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-              <p className="text-sm text-zinc-700">
-                선택됨: {selectedFile.name} (
-                {Math.ceil(selectedFile.size / 1024)}KB)
+          {resumeMode === "existing" && (
+            <>
+              {resumeLoadState === "loading" && (
+                <p className="text-sm text-zinc-500">
+                  기존 이력서를 불러오는 중입니다.
+                </p>
+              )}
+              {resumeLoadState === "error" && (
+                <div className="text-sm text-red-600">
+                  <p>{resumeLoadError}</p>
+                  <button
+                    type="button"
+                    onClick={() => void loadResumes()}
+                    className="mt-2 underline"
+                  >
+                    다시 시도
+                  </button>
+                </div>
+              )}
+              {resumes.map((resume) => (
+                <label
+                  key={resume.resumeId}
+                  className="block rounded-xl border border-zinc-200 p-4"
+                >
+                  <span className="flex items-start gap-2">
+                    <input
+                      type="radio"
+                      checked={selectedResumeId === resume.resumeId}
+                      onChange={() => {
+                        setResumeMode("existing");
+                        setSelectedResumeId(resume.resumeId);
+                        if (uploadedResume?.resumeId !== resume.resumeId)
+                          setUploadedResume(null);
+                      }}
+                    />
+                    <span>
+                      <span className="block font-medium text-zinc-900">
+                        {resume.originalFileName}
+                      </span>
+                      <span className="mt-1 block text-xs text-zinc-500">
+                        {formatDate(resume.createdAt)}
+                      </span>
+                      <span className="mt-2 block text-sm text-zinc-600">
+                        {resume.summary}
+                      </span>
+                      <TagList values={resume.skills} />
+                    </span>
+                  </span>
+                </label>
+              ))}
+            </>
+          )}
+        </fieldset>
+        {resumeMode === "existing" &&
+          resumeLoadState === "success" &&
+          resumes.length === 0 && (
+            <p className="mt-4 text-sm text-zinc-500">
+              선택할 수 있는 기존 이력서가 없습니다. 새 PDF 이력서를 업로드해
+              주세요.
+            </p>
+          )}
+        {resumeMode === "upload" && (
+          <div className="mt-5 rounded-xl border border-dashed border-zinc-300 bg-zinc-50 p-4 sm:p-5">
+            <label
+              htmlFor="resumeFile"
+              className="block text-sm font-medium text-zinc-700"
+            >
+              새 PDF 이력서 업로드
+            </label>
+            <input
+              id="resumeFile"
+              type="file"
+              accept="application/pdf,.pdf"
+              disabled={isBusy}
+              onChange={(event) =>
+                handleFileChange(event.target.files?.[0] ?? null)
+              }
+              className="mt-3 block w-full text-sm text-zinc-600 file:mr-4 file:rounded-lg file:border-0 file:bg-zinc-900 file:px-3 file:py-2 file:text-sm file:font-medium file:text-white"
+            />
+            {selectedFile && (
+              <div className="mt-3 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                <p className="text-sm text-zinc-700">
+                  선택됨: {selectedFile.name} (
+                  {Math.ceil(selectedFile.size / 1024)}KB)
+                </p>
+                <button
+                  type="button"
+                  onClick={() => void handleResumeAnalysis()}
+                  disabled={isBusy}
+                  className="rounded-lg bg-zinc-900 px-4 py-2.5 text-sm font-medium text-white disabled:opacity-50"
+                >
+                  {resumeState === "loading" ? "분석 중..." : "이력서 분석"}
+                </button>
+              </div>
+            )}
+            {resumeState === "loading" && (
+              <p role="status" className="mt-3 text-sm text-blue-700">
+                이력서를 분석하고 있습니다.
               </p>
-              <button
-                type="button"
-                onClick={() => void handleResumeAnalysis()}
-                disabled={isBusy}
-                className="rounded-lg bg-zinc-900 px-4 py-2.5 text-sm font-medium text-white disabled:opacity-50"
-              >
-                {resumeState === "loading" ? "분석 중..." : "이력서 분석"}
-              </button>
-            </div>
-          )}
-          {resumeState === "loading" && (
-            <p role="status" className="mt-3 text-sm text-blue-700">
-              이력서를 분석하고 있습니다.
-            </p>
-          )}
-          {resumeError && (
-            <p role="alert" className="mt-3 text-sm text-red-600">
-              {resumeError}
-            </p>
-          )}
-        </div>
+            )}
+            {resumeError && (
+              <p role="alert" className="mt-3 text-sm text-red-600">
+                {resumeError}
+              </p>
+            )}
+          </div>
+        )}
         {selectedResume && (
           <section className="mt-5 rounded-xl border border-violet-200 bg-violet-50 p-4">
             <p className="text-xs font-medium text-violet-700">
