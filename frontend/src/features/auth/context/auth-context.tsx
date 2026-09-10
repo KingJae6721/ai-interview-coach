@@ -9,13 +9,14 @@ import {
   useSyncExternalStore,
   type ReactNode,
 } from "react";
-import { useRouter } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 
 import {
   AUTH_EXPIRED_EVENT,
   clearAuthSession,
   getAuthSession,
   saveAuthSession,
+  setSessionExpiryNotificationSuppressed,
   subscribeAuthSession,
 } from "@/features/auth/lib/auth-storage";
 import * as authService from "@/features/auth/services/auth-service";
@@ -32,6 +33,7 @@ const AuthContext = createContext<AuthContextValue | null>(null);
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const router = useRouter();
+  const pathname = usePathname();
   const session = useSyncExternalStore(
     subscribeAuthSession,
     getAuthSession,
@@ -46,13 +48,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     function handleAuthExpired() {
-      router.replace("/login?reason=session-expired");
+      if (pathname !== "/login") {
+        router.replace("/login?reason=session-expired");
+      }
     }
 
     window.addEventListener(AUTH_EXPIRED_EVENT, handleAuthExpired);
     return () =>
       window.removeEventListener(AUTH_EXPIRED_EVENT, handleAuthExpired);
-  }, [router]);
+  }, [pathname, router]);
 
   const login = useCallback(async (request: LoginRequest) => {
     const response = await authService.login(request);
@@ -63,10 +67,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const logout = useCallback(async () => {
+    setSessionExpiryNotificationSuppressed(true);
+
     try {
       await authService.logout();
     } finally {
       clearAuthSession();
+      setSessionExpiryNotificationSuppressed(false);
     }
   }, []);
 

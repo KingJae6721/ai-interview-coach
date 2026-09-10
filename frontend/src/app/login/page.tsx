@@ -16,7 +16,7 @@ export default async function LoginPage({ searchParams }: LoginPageProps) {
     signup === "success"
       ? "회원가입이 완료되었습니다. 로그인해 주세요."
       : reason === "session-expired"
-        ? "인증이 만료되었습니다. 다시 로그인해 주세요."
+        ? "로그인 세션이 만료되었습니다. 다시 로그인해 주세요."
         : reason === "auth-required"
           ? "로그인이 필요한 페이지입니다."
           : undefined;

@@ -5,6 +5,7 @@ export const AUTH_EXPIRED_EVENT = "auth:expired";
 const listeners = new Set<() => void>();
 let cachedSerializedSession: string | null = null;
 let cachedSession: AuthSession | null = null;
+let suppressSessionExpiredEvent = false;
 
 function getSessionStorage(): Storage | null {
   return typeof window === "undefined" ? null : window.sessionStorage;
@@ -78,7 +79,17 @@ export function expireAuthSession(): void {
   const hadSession = getAuthSession() !== null;
   clearAuthSession();
 
-  if (hadSession && typeof window !== "undefined") {
+  if (
+    hadSession &&
+    !suppressSessionExpiredEvent &&
+    typeof window !== "undefined"
+  ) {
     window.dispatchEvent(new Event(AUTH_EXPIRED_EVENT));
   }
+}
+
+export function setSessionExpiryNotificationSuppressed(
+  suppressed: boolean,
+): void {
+  suppressSessionExpiredEvent = suppressed;
 }

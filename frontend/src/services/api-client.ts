@@ -1,9 +1,6 @@
 import { getApiBaseUrl } from "@/lib/env";
 import type { ApiResponse } from "@/types/api";
-import {
-  expireAuthSession,
-  getAccessToken,
-} from "@/features/auth/lib/auth-storage";
+import { getAccessToken } from "@/features/auth/lib/auth-storage";
 import { refreshAccessToken } from "@/features/auth/services/token-refresh";
 
 interface ApiRequestInit extends RequestInit {
@@ -83,10 +80,6 @@ export async function apiFetch<T>(
     if (response.status === 401 && shouldAuthenticate) {
       const newAccessToken = await refreshAccessToken();
       response = await sendRequest(normalizedPath, requestInit, newAccessToken);
-
-      if (response.status === 401) {
-        expireAuthSession();
-      }
     }
 
     return await parseResponse<T>(response);
