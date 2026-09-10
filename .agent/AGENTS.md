@@ -509,3 +509,27 @@ Setter를 생성하지 않는다.
 를 따른다.
 
 단순히 동작하는 코드보다 유지보수 가능한 코드를 우선한다.
+
+## Custom Skills
+
+작업 시작 전에 작업 범위에 해당하는 Skill을 읽고 적용한다.
+
+- Backend / Spring / JPA / API / Domain
+  - `.agent/skills/backend-development/SKILL.md`
+
+- Frontend / Next.js / TypeScript / UI
+  - `.agent/skills/frontend-development/SKILL.md`
+
+- LLM / Prompt / Provider / Structured Output / TTS / STT
+  - `.agent/skills/ai-integration/SKILL.md`
+
+- PostgreSQL / Schema / Migration / Backfill
+  - `.agent/skills/database-migration/SKILL.md`
+
+- 모든 Sprint 완료 전 품질 검증
+  - `.agent/skills/project-quality/SKILL.md`
+
+여러 영역에 걸친 작업은 필요한 Skill을 함께 적용한다.
+
+Skill과 기존 코드가 충돌할 경우 실제 프로젝트의 현재 코드/API 계약을 먼저 확인하고,
+기존 동작을 임의로 변경하지 않는다.
