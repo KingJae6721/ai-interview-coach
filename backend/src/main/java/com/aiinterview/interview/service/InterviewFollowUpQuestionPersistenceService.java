@@ -26,6 +26,8 @@ class InterviewFollowUpQuestionPersistenceService {
                 .questionOrder(interviewQuestionRepository.findMaxQuestionOrderByInterviewId(
                         parentQuestion.getInterview().getId()) + 1)
                 .content(content)
+                .category(parentQuestion.getCategory())
+                .difficulty(parentQuestion.getDifficulty())
                 .type(InterviewQuestionType.FOLLOW_UP)
                 .isAiGenerated(true)
                 .build());

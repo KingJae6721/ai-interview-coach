@@ -212,6 +212,28 @@ class OpenAiServiceImplTest {
     }
 
     @Test
+    void evaluateQuestionAnswer_usesFallbackRubricForLegacyUncategorizedQuestion() throws Exception {
+        given(aiProvider.complete(any())).willReturn(evaluationCompletion(true, Map.of(
+                "requirementFulfillment", 70,
+                "relevanceAndAccuracy", 70,
+                "explanationAndEvidence", 70,
+                "clarity", 70
+        )));
+
+        QuestionEvaluationResult result = aiService.evaluateQuestionAnswer(QuestionEvaluationRequest.builder()
+                .questionContent("Legacy question")
+                .answerContent("A substantive legacy answer")
+                .category(null)
+                .difficulty(null)
+                .build());
+
+        assertThat(result.getScore()).isEqualTo(70);
+        ArgumentCaptor<AiCompletionRequest> requestCaptor = ArgumentCaptor.forClass(AiCompletionRequest.class);
+        then(aiProvider).should().complete(requestCaptor.capture());
+        assertThat(requestCaptor.getValue().userPrompt()).contains("Question category: UNSPECIFIED");
+    }
+
+    @Test
     void analyzeJobPosting_parsesStructuredResponse() throws Exception {
         String analysis = objectMapper.writeValueAsString(Map.of(
                 "companyName", "Example Corp",

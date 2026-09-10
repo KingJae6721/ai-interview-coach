@@ -19,6 +19,12 @@ public final class QuestionEvaluationPolicy {
             "몇", "숫자", "번호", "코드", "개수", "횟수", "점수", "연도",
             "how many", "number", "code", "count", "score", "year"
     );
+    private static final List<Criterion> FALLBACK_RUBRIC = List.of(
+            new Criterion("requirementFulfillment", "질문이 요구한 핵심 내용 충족", 35),
+            new Criterion("relevanceAndAccuracy", "질문과의 관련성 및 내용의 정확성", 30),
+            new Criterion("explanationAndEvidence", "설명과 근거", 20),
+            new Criterion("clarity", "명확하고 논리적인 전달", 15)
+    );
 
     private static final Map<InterviewQuestionCategory, List<Criterion>> RUBRICS = Map.of(
             InterviewQuestionCategory.CS, List.of(
@@ -59,7 +65,7 @@ public final class QuestionEvaluationPolicy {
     }
 
     public static List<Criterion> criteria(InterviewQuestionCategory category) {
-        return RUBRICS.get(category);
+        return category == null ? FALLBACK_RUBRIC : RUBRICS.getOrDefault(category, FALLBACK_RUBRIC);
     }
 
     public static int calculateScore(InterviewQuestionCategory category, Map<String, Integer> criterionScores) {

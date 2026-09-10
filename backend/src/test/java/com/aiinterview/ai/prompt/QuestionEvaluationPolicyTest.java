@@ -51,4 +51,18 @@ class QuestionEvaluationPolicyTest {
 
         assertThat(score).isEqualTo(23);
     }
+
+    @Test
+    void missingLegacyCategory_usesFallbackRubricInsteadOfThrowingNullPointerException() {
+        assertThat(QuestionEvaluationPolicy.criteria(null))
+                .extracting(QuestionEvaluationPolicy.Criterion::key)
+                .containsExactly(
+                        "requirementFulfillment", "relevanceAndAccuracy", "explanationAndEvidence", "clarity");
+        assertThat(QuestionEvaluationPolicy.calculateScore(null, Map.of(
+                "requirementFulfillment", 70,
+                "relevanceAndAccuracy", 70,
+                "explanationAndEvidence", 70,
+                "clarity", 70
+        ))).isEqualTo(70);
+    }
 }

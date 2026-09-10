@@ -93,11 +93,14 @@ public class QuestionEvaluationServiceImpl implements QuestionEvaluationService 
 
     private QuestionEvaluationRequest toEvaluationRequest(InterviewAnswer answer) {
         InterviewQuestion question = answer.getInterviewQuestion();
+        InterviewQuestion rubricQuestion = question.getCategory() == null && question.getParentQuestion() != null
+                ? question.getParentQuestion()
+                : question;
         return QuestionEvaluationRequest.builder()
                 .questionContent(question.getContent())
                 .answerContent(answer.getAnswerContent())
-                .category(question.getCategory())
-                .difficulty(question.getDifficulty())
+                .category(rubricQuestion.getCategory())
+                .difficulty(rubricQuestion.getDifficulty())
                 .build();
     }
 

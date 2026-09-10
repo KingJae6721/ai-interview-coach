@@ -128,6 +128,40 @@ class QuestionEvaluationServiceImplTest {
         then(aiService).shouldHaveNoInteractions();
     }
 
+    @Test
+    void evaluateMissing_usesParentRubricForLegacyFollowUpWithoutCategory() {
+        User user = mock(User.class);
+        Interview interview = mock(Interview.class);
+        InterviewQuestion parentQuestion = mock(InterviewQuestion.class);
+        InterviewQuestion followUpQuestion = mock(InterviewQuestion.class);
+        InterviewAnswer followUpAnswer = mock(InterviewAnswer.class);
+
+        given(user.getId()).willReturn(10L);
+        given(interview.getUser()).willReturn(user);
+        given(parentQuestion.getCategory()).willReturn(InterviewQuestionCategory.EXPERIENCE);
+        given(parentQuestion.getDifficulty()).willReturn(InterviewQuestionDifficulty.HARD);
+        given(followUpQuestion.getInterview()).willReturn(interview);
+        given(followUpQuestion.getCategory()).willReturn(null);
+        given(followUpQuestion.getParentQuestion()).willReturn(parentQuestion);
+        given(followUpQuestion.getContent()).willReturn("follow-up question");
+        given(followUpAnswer.getId()).willReturn(1L);
+        given(followUpAnswer.getInterviewQuestion()).willReturn(followUpQuestion);
+        given(followUpAnswer.getAnswerContent()).willReturn("follow-up answer");
+        given(questionEvaluationRepository.findEvaluatedAnswerIdsByAnswerIdIn(List.of(1L)))
+                .willReturn(Set.of());
+        given(interviewAnswerRepository.findAllWithQuestionInterviewAndUserByIdIn(List.of(1L)))
+                .willReturn(List.of(followUpAnswer));
+        given(aiService.evaluateQuestionAnswer(any())).willReturn(evaluationResult());
+
+        questionEvaluationService.evaluateMissing(10L, List.of(1L));
+
+        ArgumentCaptor<QuestionEvaluationRequest> requestCaptor =
+                ArgumentCaptor.forClass(QuestionEvaluationRequest.class);
+        then(aiService).should().evaluateQuestionAnswer(requestCaptor.capture());
+        assertThat(requestCaptor.getValue().getCategory()).isEqualTo(InterviewQuestionCategory.EXPERIENCE);
+        assertThat(requestCaptor.getValue().getDifficulty()).isEqualTo(InterviewQuestionDifficulty.HARD);
+    }
+
     private InterviewAnswer answer(Long answerId, Long userId, String questionContent, String answerContent) {
         User user = mock(User.class);
         Interview interview = mock(Interview.class);

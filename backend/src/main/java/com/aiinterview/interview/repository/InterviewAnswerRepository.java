@@ -13,6 +13,7 @@ public interface InterviewAnswerRepository extends JpaRepository<InterviewAnswer
 
     @Query("select answer from InterviewAnswer answer "
             + "join fetch answer.interviewQuestion question "
+            + "left join fetch question.parentQuestion "
             + "join fetch question.interview interview "
             + "join fetch interview.user "
             + "where answer.id = :answerId")
@@ -20,6 +21,7 @@ public interface InterviewAnswerRepository extends JpaRepository<InterviewAnswer
 
     @Query("select answer from InterviewAnswer answer "
             + "join fetch answer.interviewQuestion question "
+            + "left join fetch question.parentQuestion "
             + "join fetch question.interview interview "
             + "join fetch interview.user "
             + "where answer.id in :answerIds")

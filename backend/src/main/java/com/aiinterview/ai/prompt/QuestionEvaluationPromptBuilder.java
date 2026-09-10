@@ -52,7 +52,7 @@ public final class QuestionEvaluationPromptBuilder {
                 Evaluate only with the listed criteria. Difficulty controls the expected depth, not whether unrelated
                 requirements should be introduced. If sufficient=false, explain why the answer cannot be evaluated.
                 """.formatted(
-                request.getCategory(),
+                request.getCategory() == null ? "UNSPECIFIED" : request.getCategory(),
                 request.getDifficulty(),
                 request.getQuestionContent(),
                 request.getAnswerContent(),
