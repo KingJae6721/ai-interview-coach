@@ -31,7 +31,7 @@ export default function InterviewHistoryPage() {
               >
                 새 면접 만들기
               </Link>
-              <AuthStatus />
+              <AuthStatus showInterviewCta={false} />
             </div>
           </header>
 

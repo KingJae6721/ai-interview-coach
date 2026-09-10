@@ -6,7 +6,11 @@ import { useState } from "react";
 import { useAuth } from "@/features/auth/context/auth-context";
 import { getErrorMessage } from "@/features/auth/lib/get-error-message";
 
-export function AuthStatus() {
+interface AuthStatusProps {
+  showInterviewCta?: boolean;
+}
+
+export function AuthStatus({ showInterviewCta = true }: AuthStatusProps) {
   const { user, isInitialized, logout } = useAuth();
   const [isLoading, setIsLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState("");
@@ -35,12 +39,14 @@ export function AuthStatus() {
           <strong>{user.nickname}</strong>님, 환영합니다.
         </p>
         <div className="mt-5 flex flex-wrap gap-3">
-          <Link
-            href="/interviews/new"
-            className="rounded-lg bg-zinc-900 px-5 py-2.5 text-sm font-medium text-white hover:bg-zinc-700"
-          >
-            면접 준비하기
-          </Link>
+          {showInterviewCta && (
+            <Link
+              href="/interviews/new"
+              className="rounded-lg bg-zinc-900 px-5 py-2.5 text-sm font-medium text-white hover:bg-zinc-700"
+            >
+              면접 준비하기
+            </Link>
+          )}
           <Link
             href="/dashboard"
             className="rounded-lg border border-zinc-300 px-5 py-2.5 text-sm font-medium hover:bg-zinc-50"
