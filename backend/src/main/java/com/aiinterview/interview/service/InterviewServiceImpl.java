@@ -84,12 +84,13 @@ public class InterviewServiceImpl implements InterviewService {
         ResumeAnalysis resumeAnalysis = resolveResumeAnalysis(request.getResumeId(), userId);
         JobPosting jobPosting = jobPostingAnalysis == null ? null : jobPostingAnalysis.getJobPosting();
         Resume resume = resumeAnalysis == null ? null : resumeAnalysis.getResume();
+        String title = resolveInterviewTitle(userId, jobPostingAnalysis, resumeAnalysis, request.getTitle());
 
         Interview interview = Interview.builder()
                 .jobPosition(jobPosition)
                 .jobPosting(jobPosting)
                 .resume(resume)
-                .title(request.getTitle())
+                .title(title)
                 .status(InterviewStatus.READY)
                 .build();
 
@@ -99,7 +100,23 @@ public class InterviewServiceImpl implements InterviewService {
                 InterviewQuestionPromptBuilder.buildUserPrompt(
                         interview, jobPostingAnalysis, resumeAnalysis, distributions));
         return interviewCreationPersistenceService.save(userId, request.getJobPostingId(), request.getResumeId(),
-                request.getTitle(), generatedQuestions, distributions);
+                title, generatedQuestions, distributions);
+    }
+
+    private String resolveInterviewTitle(Long userId, JobPostingAnalysis jobPostingAnalysis,
+                                         ResumeAnalysis resumeAnalysis, String requestedTitle) {
+        if (requestedTitle != null && !requestedTitle.isBlank()) {
+            return requestedTitle.trim();
+        }
+
+        JobPosting jobPosting = jobPostingAnalysis.getJobPosting();
+        long practiceNumber = interviewRepository.countByUserIdAndJobPostingId(userId, jobPosting.getId()) + 1;
+        String interviewType = resumeAnalysis == null ? "모의 면접" : "맞춤 면접";
+        String suffix = " %s #%d".formatted(interviewType, practiceNumber);
+        String context = "%s %s".formatted(jobPostingAnalysis.getCompanyName(), jobPostingAnalysis.getPositionName());
+        int contextMaxLength = 100 - suffix.length();
+
+        return (context.length() <= contextMaxLength ? context : context.substring(0, contextMaxLength)) + suffix;
     }
 
     private JobPostingAnalysis resolveJobPostingAnalysis(Long jobPostingId, Long userId) {

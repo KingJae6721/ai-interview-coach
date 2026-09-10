@@ -1,5 +1,5 @@
 export interface InterviewCreateRequest {
-  title: string;
+  title?: string;
   jobPostingId: number;
   resumeId?: number;
 }

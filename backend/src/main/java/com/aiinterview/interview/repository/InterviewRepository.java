@@ -19,6 +19,8 @@ import java.util.List;
 
 public interface InterviewRepository extends JpaRepository<Interview, Long> {
 
+    long countByUserIdAndJobPostingId(Long userId, Long jobPostingId);
+
     @EntityGraph(attributePaths = {"jobPosition", "jobPosition.company"})
     Page<Interview> findByUserId(Long userId, Pageable pageable);
 

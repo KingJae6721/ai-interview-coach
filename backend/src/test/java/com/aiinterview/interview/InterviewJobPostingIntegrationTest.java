@@ -154,6 +154,25 @@ class InterviewJobPostingIntegrationTest {
     }
 
     @Test
+    void createInterview_withoutTitle_generatesSequentialTitleForJobPosting() throws Exception {
+        JobPosting jobPosting = createJobPosting(jobPosition, true);
+
+        mockMvc.perform(post("/api/v1/interviews")
+                        .header("Authorization", "Bearer " + token)
+                        .contentType("application/json")
+                        .content("{\"jobPostingId\":" + jobPosting.getId() + "}"))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.data.title").value("Example Corp Backend Developer 모의 면접 #1"));
+
+        mockMvc.perform(post("/api/v1/interviews")
+                        .header("Authorization", "Bearer " + token)
+                        .contentType("application/json")
+                        .content("{\"jobPostingId\":" + jobPosting.getId() + "}"))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.data.title").value("Example Corp Backend Developer 모의 면접 #2"));
+    }
+
+    @Test
     void createInterview_rejectsUnknownJobPosting() throws Exception {
         performCreate(999999L)
                 .andExpect(status().isNotFound())
