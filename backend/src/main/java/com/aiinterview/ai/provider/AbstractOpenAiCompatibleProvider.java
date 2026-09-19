@@ -101,6 +101,7 @@ abstract class AbstractOpenAiCompatibleProvider implements AiProvider {
         if (request.maxCompletionTokens() != null) {
             body.put("max_completion_tokens", request.maxCompletionTokens());
         }
+        customizeRequestBody(body);
 
         for (int retryCount = 0; ; retryCount++) {
             try {
@@ -210,6 +211,9 @@ abstract class AbstractOpenAiCompatibleProvider implements AiProvider {
     @Override
     public String getModel() {
         return model;
+    }
+
+    protected void customizeRequestBody(Map<String, Object> body) {
     }
 
     private String toFailureReason(int status) {

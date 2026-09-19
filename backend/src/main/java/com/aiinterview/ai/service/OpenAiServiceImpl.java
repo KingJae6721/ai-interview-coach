@@ -141,12 +141,7 @@ public class OpenAiServiceImpl implements AiService {
     }
 
     private List<String> extractQuestions(String responseBody) throws JacksonException {
-        JsonNode response = objectMapper.readTree(responseBody);
-        JsonNode content = response.at("/choices/0/message/content");
-
-        if (!content.isTextual()) {
-            throw unexpectedResponseFormat();
-        }
+        JsonNode content = extractResponseContent(responseBody, "QUESTION_GENERATION");
 
         List<String> questions = objectMapper.readValue(removeJsonCodeFence(content.asText()), new TypeReference<>() {
         });
@@ -159,12 +154,7 @@ public class OpenAiServiceImpl implements AiService {
     }
 
     private Optional<String> extractFollowUpQuestion(String responseBody) throws JacksonException {
-        JsonNode response = objectMapper.readTree(responseBody);
-        JsonNode content = response.at("/choices/0/message/content");
-
-        if (!content.isTextual()) {
-            throw unexpectedResponseFormat();
-        }
+        JsonNode content = extractResponseContent(responseBody, "FOLLOW_UP_GENERATION");
 
         String followUpQuestion = content.asText().trim();
         if ("NO_FOLLOW_UP".equals(followUpQuestion)) {
@@ -301,12 +291,7 @@ public class OpenAiServiceImpl implements AiService {
     }
 
     private InterviewFeedbackResult extractFeedback(String responseBody) throws JacksonException {
-        JsonNode response = objectMapper.readTree(responseBody);
-        JsonNode content = response.at("/choices/0/message/content");
-
-        if (!content.isTextual()) {
-            throw unexpectedResponseFormat();
-        }
+        JsonNode content = extractResponseContent(responseBody, "INTERVIEW_FEEDBACK");
 
         JsonNode feedback = objectMapper.readTree(content.asText());
         JsonNode overallScore = feedback.get("overallScore");
@@ -327,12 +312,7 @@ public class OpenAiServiceImpl implements AiService {
 
     private QuestionEvaluationResult extractQuestionEvaluation(String responseBody, QuestionEvaluationRequest request)
             throws JacksonException {
-        JsonNode response = objectMapper.readTree(responseBody);
-        JsonNode content = response.at("/choices/0/message/content");
-
-        if (!content.isTextual()) {
-            throw unexpectedResponseFormat();
-        }
+        JsonNode content = extractResponseContent(responseBody, "QUESTION_EVALUATION");
 
         JsonNode evaluation = objectMapper.readTree(removeJsonCodeFence(content.asText()));
         JsonNode sufficient = evaluation.get("sufficient");
@@ -389,11 +369,7 @@ public class OpenAiServiceImpl implements AiService {
     }
 
     private JobPostingAnalysisResult extractJobPostingAnalysis(String responseBody) throws JacksonException {
-        JsonNode response = objectMapper.readTree(responseBody);
-        JsonNode content = response.at("/choices/0/message/content");
-        if (!content.isTextual()) {
-            throw unexpectedResponseFormat();
-        }
+        JsonNode content = extractResponseContent(responseBody, "JOB_POSTING_ANALYSIS");
 
         JsonNode analysis = objectMapper.readTree(removeJsonCodeFence(content.asText()));
         return JobPostingAnalysisResult.builder()
@@ -411,11 +387,7 @@ public class OpenAiServiceImpl implements AiService {
     }
 
     private ResumeAnalysisResult extractResumeAnalysis(String responseBody) throws JacksonException {
-        JsonNode response = objectMapper.readTree(responseBody);
-        JsonNode content = response.at("/choices/0/message/content");
-        if (!content.isTextual()) {
-            throw unexpectedResponseFormat();
-        }
+        JsonNode content = extractResponseContent(responseBody, "RESUME_ANALYSIS");
         JsonNode analysis = objectMapper.readTree(removeJsonCodeFence(content.asText()));
         return ResumeAnalysisResult.builder()
                 .summary(getNullableText(analysis, "summary"))
@@ -475,6 +447,25 @@ public class OpenAiServiceImpl implements AiService {
             return trimmed;
         }
         return trimmed.substring(firstLineEnd + 1, trimmed.length() - 3).trim();
+    }
+
+    private JsonNode extractResponseContent(String responseBody, String operation) throws JacksonException {
+        JsonNode response = objectMapper.readTree(responseBody);
+        JsonNode finishReasonNode = response.at("/choices/0/finish_reason");
+        String finishReason = finishReasonNode.isTextual() ? finishReasonNode.asText() : "UNAVAILABLE";
+        JsonNode content = response.at("/choices/0/message/content");
+
+        if ("length".equals(finishReason)) {
+            log.error("AI response processing failed. operation={}, reason=OUTPUT_TOKEN_LIMIT, finishReason=length",
+                    operation);
+            throw new BusinessException(ErrorCode.AI_REQUEST_FAILED);
+        }
+        if (!content.isTextual() || !StringUtils.hasText(content.asText())) {
+            log.error("AI response processing failed. operation={}, reason=CONTENT_MISSING, finishReason={}",
+                    operation, finishReason);
+            throw new BusinessException(ErrorCode.AI_REQUEST_FAILED);
+        }
+        return content;
     }
 
     private BusinessException jsonDeserializationFailed(JacksonException exception) {

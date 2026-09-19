@@ -92,6 +92,21 @@ class OpenAiServiceImplTest {
     }
 
     @Test
+    void generateInterviewFeedback_reportsOutputTokenLimitWithoutParsingTruncatedContent() throws Exception {
+        given(aiProvider.complete(any())).willReturn(objectMapper.writeValueAsString(Map.of(
+                "choices", List.of(Map.of(
+                        "finish_reason", "length",
+                        "message", Map.of("content", "{\"overallScore\":90")
+                ))
+        )));
+
+        assertThatThrownBy(() -> aiService.generateInterviewFeedback(InterviewFeedbackRequest.builder()
+                .interviewTitle("title")
+                .questionAnswers(List.of())
+                .build())).isInstanceOf(BusinessException.class);
+    }
+
+    @Test
     void evaluateQuestionAnswer_calculatesScoreFromCategoryCriteria() throws Exception {
         given(aiProvider.complete(any())).willReturn(evaluationCompletion(true, Map.of(
                 "requirementFulfillment", 70,
