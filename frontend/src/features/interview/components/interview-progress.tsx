@@ -35,6 +35,11 @@ interface InterviewProgressProps {
 type LoadState = "loading" | "ready" | "success" | "cancelled" | "error";
 
 const MINIMUM_PARTIAL_FEEDBACK_ANSWER_COUNT = 2;
+const QUESTION_TTS_ENABLED_STORAGE_KEY =
+  "ai-interview-coach.question-tts-enabled";
+const QUESTION_TTS_VOICE_STORAGE_KEY = "ai-interview-coach.question-tts-voice";
+const QUESTION_TTS_VOLUME_STORAGE_KEY =
+  "ai-interview-coach.question-tts-volume";
 
 const CATEGORY_LABELS: Record<string, string> = {
   CS: "CS",
@@ -107,6 +112,9 @@ export function InterviewProgress({ interviewId }: InterviewProgressProps) {
   const isComposingRef = useRef(false);
   const shouldFocusNextQuestionRef = useRef(false);
   const hasRenderedConversationRef = useRef(false);
+  const spokenQuestionIdsRef = useRef(new Set<number>());
+  const activeUtteranceRef = useRef<SpeechSynthesisUtterance | null>(null);
+  const activeQuestionContentRef = useRef<string | null>(null);
   const highlightTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [loadState, setLoadState] = useState<LoadState>("loading");
   const [progress, setProgress] = useState<InterviewProgressResponse | null>(
@@ -132,6 +140,14 @@ export function InterviewProgress({ interviewId }: InterviewProgressProps) {
   const [hasCancelled, setHasCancelled] = useState(false);
   const [isGeneratingPartialFeedback, setIsGeneratingPartialFeedback] =
     useState(false);
+  const [isSpeechSupported, setIsSpeechSupported] = useState(false);
+  const [isSpeechEnabled, setIsSpeechEnabled] = useState(false);
+  const [isSpeechPreferenceLoaded, setIsSpeechPreferenceLoaded] =
+    useState(false);
+  const [isSpeakingQuestion, setIsSpeakingQuestion] = useState(false);
+  const [speechVoices, setSpeechVoices] = useState<SpeechSynthesisVoice[]>([]);
+  const [selectedVoiceUri, setSelectedVoiceUri] = useState("");
+  const [speechVolume, setSpeechVolume] = useState(1);
 
   const loadInterview = useCallback(async () => {
     setLoadErrorMessage("");
@@ -191,6 +207,149 @@ export function InterviewProgress({ interviewId }: InterviewProgressProps) {
   const progressPercent =
     totalCount === 0 ? 0 : Math.round((answeredCount / totalCount) * 100);
 
+  const stopQuestionSpeech = useCallback(() => {
+    if (typeof window === "undefined" || !("speechSynthesis" in window)) {
+      return;
+    }
+
+    window.speechSynthesis.cancel();
+    activeUtteranceRef.current = null;
+    activeQuestionContentRef.current = null;
+    setIsSpeakingQuestion(false);
+  }, []);
+
+  const speakQuestion = useCallback(
+    (questionContent: string, volume = speechVolume): boolean => {
+      if (
+        typeof window === "undefined" ||
+        !("speechSynthesis" in window) ||
+        !("SpeechSynthesisUtterance" in window)
+      ) {
+        return false;
+      }
+
+      const synthesis = window.speechSynthesis;
+      const utterance = new SpeechSynthesisUtterance(questionContent);
+      const hasKorean = /[\u3131-\uD79D]/.test(questionContent);
+      const preferredVoice =
+        speechVoices.find((voice) => voice.voiceURI === selectedVoiceUri) ??
+        (hasKorean
+          ? (speechVoices.find(
+              (voice) => voice.lang.toLowerCase() === "ko-kr",
+            ) ??
+            speechVoices.find((voice) =>
+              voice.lang.toLowerCase().startsWith("ko"),
+            ))
+          : speechVoices.find(
+              (voice) =>
+                voice.lang.toLowerCase() === navigator.language.toLowerCase(),
+            ));
+
+      utterance.lang =
+        preferredVoice?.lang ?? (hasKorean ? "ko-KR" : navigator.language);
+      utterance.rate = 0.95;
+      utterance.volume = volume;
+      if (preferredVoice) {
+        utterance.voice = preferredVoice;
+      }
+
+      utterance.onend = () => {
+        if (activeUtteranceRef.current === utterance) {
+          activeUtteranceRef.current = null;
+          activeQuestionContentRef.current = null;
+          setIsSpeakingQuestion(false);
+        }
+      };
+      utterance.onerror = () => {
+        if (activeUtteranceRef.current === utterance) {
+          activeUtteranceRef.current = null;
+          activeQuestionContentRef.current = null;
+          setIsSpeakingQuestion(false);
+        }
+      };
+
+      synthesis.cancel();
+      activeUtteranceRef.current = utterance;
+      activeQuestionContentRef.current = questionContent;
+      setIsSpeakingQuestion(true);
+      synthesis.speak(utterance);
+      return true;
+    },
+    [selectedVoiceUri, speechVoices, speechVolume],
+  );
+
+  useEffect(() => {
+    const timeoutId = window.setTimeout(() => {
+      const supported = "speechSynthesis" in window;
+      setIsSpeechSupported(supported);
+      setIsSpeechEnabled(
+        supported &&
+          window.localStorage.getItem(QUESTION_TTS_ENABLED_STORAGE_KEY) !==
+            "false",
+      );
+      if (supported) {
+        const storedVolume = Number.parseFloat(
+          window.localStorage.getItem(QUESTION_TTS_VOLUME_STORAGE_KEY) ?? "1",
+        );
+        setSpeechVoices(window.speechSynthesis.getVoices());
+        setSelectedVoiceUri(
+          window.localStorage.getItem(QUESTION_TTS_VOICE_STORAGE_KEY) ?? "",
+        );
+        setSpeechVolume(
+          Number.isFinite(storedVolume)
+            ? Math.min(Math.max(storedVolume, 0), 1)
+            : 1,
+        );
+      }
+      setIsSpeechPreferenceLoaded(true);
+    }, 0);
+
+    function handleVoicesChanged() {
+      setSpeechVoices(window.speechSynthesis.getVoices());
+    }
+
+    window.speechSynthesis?.addEventListener(
+      "voiceschanged",
+      handleVoicesChanged,
+    );
+
+    return () => {
+      window.clearTimeout(timeoutId);
+      window.speechSynthesis?.removeEventListener(
+        "voiceschanged",
+        handleVoicesChanged,
+      );
+    };
+  }, []);
+
+  useEffect(() => {
+    if (
+      !currentQuestion ||
+      !isSpeechSupported ||
+      !isSpeechPreferenceLoaded ||
+      !isSpeechEnabled ||
+      isAdvancingQuestion ||
+      pendingFollowUpQuestionId !== null ||
+      needsProgressRefresh ||
+      spokenQuestionIdsRef.current.has(currentQuestion.questionId)
+    ) {
+      return;
+    }
+
+    if (speakQuestion(currentQuestion.content)) {
+      spokenQuestionIdsRef.current.add(currentQuestion.questionId);
+    }
+  }, [
+    currentQuestion,
+    isAdvancingQuestion,
+    isSpeechEnabled,
+    isSpeechPreferenceLoaded,
+    isSpeechSupported,
+    needsProgressRefresh,
+    pendingFollowUpQuestionId,
+    speakQuestion,
+  ]);
+
   useEffect(() => {
     if (!conversationVersion) {
       return;
@@ -233,9 +392,41 @@ export function InterviewProgress({ interviewId }: InterviewProgressProps) {
       if (highlightTimerRef.current) {
         clearTimeout(highlightTimerRef.current);
       }
+      stopQuestionSpeech();
     },
-    [],
+    [stopQuestionSpeech],
   );
+
+  function handleSpeechEnabledChange() {
+    const nextEnabled = !isSpeechEnabled;
+    setIsSpeechEnabled(nextEnabled);
+    window.localStorage.setItem(
+      QUESTION_TTS_ENABLED_STORAGE_KEY,
+      String(nextEnabled),
+    );
+
+    if (!nextEnabled) {
+      stopQuestionSpeech();
+    }
+  }
+
+  function handleVoiceChange(voiceUri: string) {
+    setSelectedVoiceUri(voiceUri);
+    window.localStorage.setItem(QUESTION_TTS_VOICE_STORAGE_KEY, voiceUri);
+  }
+
+  function handleSpeechVolumeChange(volume: number) {
+    const activeQuestionContent = activeQuestionContentRef.current;
+    setSpeechVolume(volume);
+    window.localStorage.setItem(
+      QUESTION_TTS_VOLUME_STORAGE_KEY,
+      String(volume),
+    );
+
+    if (activeQuestionContent) {
+      speakQuestion(activeQuestionContent, volume);
+    }
+  }
 
   const [highlightedQuestionId, setHighlightedQuestionId] = useState<
     number | null
@@ -696,16 +887,84 @@ export function InterviewProgress({ interviewId }: InterviewProgressProps) {
                   질문과 답변 기록은 진행 순서대로 표시됩니다.
                 </p>
               </div>
-              {currentQuestion && (
+              <div className="flex flex-wrap items-center justify-end gap-2">
+                {currentQuestion && (
+                  <button
+                    type="button"
+                    onClick={() => scrollToQuestion(currentQuestion.questionId)}
+                    className="shrink-0 rounded-lg border border-zinc-300 px-3 py-2 text-xs font-medium text-zinc-700 hover:bg-zinc-50"
+                  >
+                    현재 질문으로 이동
+                  </button>
+                )}
                 <button
                   type="button"
-                  onClick={() => scrollToQuestion(currentQuestion.questionId)}
-                  className="shrink-0 rounded-lg border border-zinc-300 px-3 py-2 text-xs font-medium text-zinc-700 hover:bg-zinc-50"
+                  onClick={handleSpeechEnabledChange}
+                  disabled={!isSpeechSupported}
+                  aria-pressed={isSpeechEnabled}
+                  className="rounded-lg border border-zinc-300 px-3 py-2 text-xs font-medium text-zinc-700 hover:bg-zinc-50 disabled:cursor-not-allowed disabled:opacity-50"
                 >
-                  현재 질문으로 이동
+                  질문 음성 읽기 {isSpeechEnabled ? "ON" : "OFF"}
                 </button>
-              )}
+                {isSpeechSupported && currentQuestion && (
+                  <button
+                    type="button"
+                    onClick={() => speakQuestion(currentQuestion.content)}
+                    disabled={!isSpeechEnabled || isAdvancingQuestion}
+                    className="rounded-lg border border-zinc-300 px-3 py-2 text-xs font-medium text-zinc-700 hover:bg-zinc-50 disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    다시 듣기
+                  </button>
+                )}
+                {isSpeechSupported && isSpeakingQuestion && (
+                  <button
+                    type="button"
+                    onClick={stopQuestionSpeech}
+                    className="rounded-lg border border-zinc-900 bg-zinc-900 px-3 py-2 text-xs font-medium text-white hover:bg-zinc-700"
+                  >
+                    중지
+                  </button>
+                )}
+              </div>
             </div>
+            {!isSpeechSupported && isSpeechPreferenceLoaded && (
+              <p className="border-b border-zinc-200 px-4 pb-3 text-xs text-zinc-500 sm:px-6">
+                현재 브라우저에서는 질문 음성 읽기를 지원하지 않습니다.
+              </p>
+            )}
+            {isSpeechSupported && (
+              <div className="grid gap-4 border-b border-zinc-200 px-4 py-4 sm:grid-cols-[minmax(0,1fr)_12rem] sm:px-6">
+                <label className="text-xs font-medium text-zinc-600">
+                  목소리
+                  <select
+                    value={selectedVoiceUri}
+                    onChange={(event) => handleVoiceChange(event.target.value)}
+                    className="mt-2 w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm font-normal text-zinc-800 outline-none focus:border-zinc-900 focus:ring-2 focus:ring-zinc-200"
+                  >
+                    <option value="">자동 선택 (질문 언어 우선)</option>
+                    {speechVoices.map((voice) => (
+                      <option key={voice.voiceURI} value={voice.voiceURI}>
+                        {voice.name} ({voice.lang})
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <label className="text-xs font-medium text-zinc-600">
+                  볼륨 {Math.round(speechVolume * 100)}%
+                  <input
+                    type="range"
+                    min="0"
+                    max="1"
+                    step="0.1"
+                    value={speechVolume}
+                    onChange={(event) =>
+                      handleSpeechVolumeChange(Number(event.target.value))
+                    }
+                    className="mt-2.5 w-full accent-zinc-900"
+                  />
+                </label>
+              </div>
+            )}
 
             <div
               ref={conversationRef}
@@ -827,7 +1086,7 @@ export function InterviewProgress({ interviewId }: InterviewProgressProps) {
             </section>
           )}
 
-          <section className="sticky bottom-3 z-10 rounded-2xl border border-zinc-200 bg-white/95 p-4 shadow-lg backdrop-blur sm:p-5">
+          <section className="sticky bottom-3 z-10 rounded-2xl border border-zinc-200 bg-white/70 p-4 shadow-lg backdrop-blur sm:p-5">
             {progress.allAnswered ? (
               <div className="rounded-xl bg-emerald-50 p-4 text-center">
                 <p className="font-medium text-emerald-800">
