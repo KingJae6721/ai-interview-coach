@@ -1,36 +1,29 @@
-version: "3.9"
+name: ai-interview-coach
 
 services:
-
   postgres:
     image: postgres:16
-
     container_name: ai-interview-postgres
-
     restart: always
-
     environment:
-      POSTGRES_DB: ai_interview
-
-      POSTGRES_USER: postgres
-
-      POSTGRES_PASSWORD: postgres
-
+      POSTGRES_DB: ${POSTGRES_DB:-ai_interview}
+      POSTGRES_USER: ${POSTGRES_ADMIN_USER:-ai_interview_admin}
+      POSTGRES_PASSWORD: ${POSTGRES_ADMIN_PASSWORD:?Set POSTGRES_ADMIN_PASSWORD}
+      POSTGRES_APP_USER: ${DB_USERNAME:-ai_interview_app}
+      POSTGRES_APP_PASSWORD: ${DB_PASSWORD:?Set DB_PASSWORD}
     ports:
-      - "5432:5432"
-
+      - "127.0.0.1:5432:5432"
     volumes:
       - postgres-data:/var/lib/postgresql/data
+      - ./initdb:/docker-entrypoint-initdb.d:ro
 
   redis:
     image: redis:7
-
     container_name: ai-interview-redis
-
     restart: always
-
     ports:
-      - "6379:6379"
+      - "127.0.0.1:6379:6379"
 
 volumes:
   postgres-data:
+    name: ai-interview-postgres-data

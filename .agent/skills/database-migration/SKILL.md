@@ -16,5 +16,6 @@ Compose 작업은 `docker/` 디렉터리 기준으로 수행한다.
 
 PostgreSQL:
 - db: ai_interview
-- user: postgres
-- password: postgres
+- application user: `${DB_USERNAME:ai_interview_app}`
+- application password: `DB_PASSWORD` from the Git-ignored `docker/.env`
+- administration user: `${POSTGRES_ADMIN_USER:ai_interview_admin}` (must not be used by Spring Boot)
