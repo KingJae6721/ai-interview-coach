@@ -18,3 +18,8 @@ Thumbs.db
 **/node_modules/
 **/.next/
 **/out/
+
+# Local environment files
+**/.env
+**/.env.*
+!**/.env.example

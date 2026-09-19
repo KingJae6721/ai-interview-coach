@@ -3,6 +3,7 @@ package com.aiinterview.common.config;
 import com.aiinterview.auth.JwtAuthenticationFilter;
 import lombok.RequiredArgsConstructor;
 import org.springframework.context.annotation.Bean;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
@@ -31,11 +32,15 @@ public class SecurityConfig {
 
     private final JwtAuthenticationFilter jwtAuthenticationFilter;
 
+    @Value("${app.cors.allowed-origins:http://localhost:3000}")
+    private List<String> allowedOrigins;
+
     /**
      * 공개(인증 불필요) 경로 목록.
      */
     private static final String[] PUBLIC_URLS = {
             "/api/v1/auth/**",  // 회원가입, 로그인 등 인증 API
+            "/actuator/health",
             "/swagger-ui/**",   // Swagger UI static resources
             "/swagger-ui.html", // Swagger UI HTML 진입점
             "/v3/api-docs/**",  // OpenAPI 문서 규격
@@ -80,7 +85,7 @@ public class SecurityConfig {
     @Bean
     public CorsConfigurationSource corsConfigurationSource() {
         CorsConfiguration configuration = new CorsConfiguration();
-        configuration.setAllowedOrigins(List.of("http://localhost:3000"));
+        configuration.setAllowedOrigins(allowedOrigins);
         configuration.setAllowedMethods(List.of("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"));
         configuration.setAllowedHeaders(List.of("Authorization", "Content-Type"));
         configuration.setAllowCredentials(true);
