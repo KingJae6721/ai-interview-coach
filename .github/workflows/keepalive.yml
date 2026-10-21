@@ -1,0 +1,30 @@
+name: Keep production warm
+
+on:
+  schedule:
+    # 00:00 / 12:00 UTC = 09:00 / 21:00 KST
+    - cron: "0 0,12 * * *"
+
+  workflow_dispatch:
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+
+    steps:
+      - name: Ping backend health endpoint
+        env:
+          KEEPALIVE_URL: ${{ secrets.KEEPALIVE_URL }}
+
+        run: |
+          if [ -z "$KEEPALIVE_URL" ]; then
+            echo "KEEPALIVE_URL repository secret is not configured."
+            exit 1
+          fi
+
+          curl --fail --silent --show-error \
+            --max-time 120 \
+            --retry 2 \
+            --retry-delay 10 \
+            "$KEEPALIVE_URL"
