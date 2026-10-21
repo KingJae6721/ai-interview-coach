@@ -68,10 +68,6 @@ public class JwtProvider {
                 .compact();
     }
 
-    public long getRefreshExpirationSeconds() {
-        return refreshExpiration / 1000;
-    }
-
     /**
      * 유효한 Access Token의 남은 만료 시간을 밀리초 단위로 반환한다.
      */

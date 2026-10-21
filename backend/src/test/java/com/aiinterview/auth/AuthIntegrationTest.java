@@ -25,6 +25,9 @@ import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
 import org.testcontainers.utility.DockerImageName;
 
+import java.util.Set;
+import java.util.concurrent.TimeUnit;
+
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
@@ -38,6 +41,8 @@ class AuthIntegrationTest {
         private static final String EMAIL = "auth-test@example.com";
         private static final String PASSWORD = "Password123!";
         private static final String JWT_SECRET = "c3ByaW5nLWJvb3QtYWktaW50ZXJ2aWV3LWNvYWNoLXBvcnRmb2xpby1zZWNyZXQta2V5LTMyei1ieXRlcy1sZW5ndGg=";
+        private static final long ACCESS_TOKEN_EXPIRATION_MILLIS = 60_000L;
+        private static final long REFRESH_TOKEN_EXPIRATION_MILLIS = 120_000L;
 
         @Container
         static final PostgreSQLContainer<?> POSTGRES = new PostgreSQLContainer<>("postgres:16-alpine")
@@ -56,6 +61,8 @@ class AuthIntegrationTest {
                 registry.add("spring.datasource.password", POSTGRES::getPassword);
                 registry.add("spring.data.redis.host", REDIS::getHost);
                 registry.add("spring.data.redis.port", () -> REDIS.getMappedPort(6379));
+                registry.add("jwt.expiration", () -> ACCESS_TOKEN_EXPIRATION_MILLIS);
+                registry.add("jwt.refresh-expiration", () -> REFRESH_TOKEN_EXPIRATION_MILLIS);
         }
 
         private MockMvc mockMvc;
@@ -70,6 +77,8 @@ class AuthIntegrationTest {
         private BlacklistedAccessTokenRepository blacklistedAccessTokenRepository;
         @Autowired
         private StringRedisTemplate redisTemplate;
+        @Autowired
+        private JwtProvider jwtProvider;
 
         @BeforeEach
         void setUpMockMvc() {
@@ -96,6 +105,11 @@ class AuthIntegrationTest {
                 Tokens loginTokens = login();
                 assertThat(refreshTokenRepository.findById(user.getId())).hasValueSatisfying(
                                 token -> assertThat(token.getToken()).isEqualTo(loginTokens.refreshToken()));
+                assertTokenTtlMatchesJwt(RefreshTokenRepository.KEY_PREFIX + user.getId(),
+                                loginTokens.refreshToken());
+                assertThat(redisTemplate.keys("refreshToken*")).containsExactly(
+                                RefreshTokenRepository.KEY_PREFIX + user.getId());
+                assertAuthenticationKeysHavePositiveTtl();
 
                 mockMvc.perform(get("/api/v1/users/me").header("Authorization", "Bearer " + loginTokens.accessToken()))
                                 .andExpect(status().isOk());
@@ -106,6 +120,9 @@ class AuthIntegrationTest {
                 assertThat(rotatedTokens.refreshToken()).isNotEqualTo(loginTokens.refreshToken());
                 assertThat(refreshTokenRepository.findById(user.getId())).hasValueSatisfying(
                                 token -> assertThat(token.getToken()).isEqualTo(rotatedTokens.refreshToken()));
+                assertTokenTtlMatchesJwt(RefreshTokenRepository.KEY_PREFIX + user.getId(),
+                                rotatedTokens.refreshToken());
+                assertAuthenticationKeysHavePositiveTtl();
 
                 mockMvc.perform(post("/api/v1/auth/reissue").contentType(MediaType.APPLICATION_JSON)
                                 .content("{\"refreshToken\":\"" + loginTokens.refreshToken() + "\"}"))
@@ -119,6 +136,12 @@ class AuthIntegrationTest {
                                 .andExpect(status().isOk());
                 assertThat(refreshTokenRepository.findById(user.getId())).isEmpty();
                 assertThat(blacklistedAccessTokenRepository.existsById(rotatedTokens.accessToken())).isTrue();
+                assertTokenTtlMatchesJwt(BlacklistedAccessTokenRepository.KEY_PREFIX + rotatedTokens.accessToken(),
+                                rotatedTokens.accessToken());
+                assertThat(redisTemplate.keys("refreshToken*")).isEmpty();
+                assertThat(redisTemplate.keys("accessTokenBlacklist*")).containsExactly(
+                                BlacklistedAccessTokenRepository.KEY_PREFIX + rotatedTokens.accessToken());
+                assertAuthenticationKeysHavePositiveTtl();
 
                 mockMvc.perform(get("/api/v1/users/me").header("Authorization",
                                 "Bearer " + rotatedTokens.accessToken()))
@@ -129,6 +152,30 @@ class AuthIntegrationTest {
                 Thread.sleep(10);
                 mockMvc.perform(get("/api/v1/users/me").header("Authorization", "Bearer " + expiredToken))
                                 .andExpect(status().isForbidden());
+                mockMvc.perform(post("/api/v1/auth/logout").header("Authorization", "Bearer " + expiredToken))
+                                .andExpect(status().isUnauthorized());
+                assertThat(redisTemplate.hasKey(BlacklistedAccessTokenRepository.KEY_PREFIX + expiredToken)).isFalse();
+        }
+
+        @Test
+        void tokenRepositories_doNotStoreNonPositiveTtlKeys() {
+                Long userId = 9999L;
+                String accessToken = "non-positive-ttl-access-token";
+
+                refreshTokenRepository.save(RefreshToken.builder()
+                                .userId(userId)
+                                .token("non-positive-ttl-refresh-token")
+                                .ttl(0L)
+                                .build());
+                blacklistedAccessTokenRepository.save(BlacklistedAccessToken.builder()
+                                .token(accessToken)
+                                .ttl(-1L)
+                                .build());
+
+                assertThat(redisTemplate.hasKey(RefreshTokenRepository.KEY_PREFIX + userId)).isFalse();
+                assertThat(redisTemplate.hasKey(BlacklistedAccessTokenRepository.KEY_PREFIX + accessToken)).isFalse();
+                assertThat(redisTemplate.keys("refreshToken*")).isEmpty();
+                assertThat(redisTemplate.keys("accessTokenBlacklist*")).isEmpty();
         }
 
         @Test
@@ -161,6 +208,28 @@ class AuthIntegrationTest {
         private Tokens tokens(String body) throws Exception {
                 JsonNode data = objectMapper.readTree(body).path("data");
                 return new Tokens(data.path("accessToken").asText(), data.path("refreshToken").asText());
+        }
+
+        private void assertTokenTtlMatchesJwt(String key, String token) {
+                long tokenRemainingMillis = jwtProvider.getRemainingExpirationMillis(token);
+                Long redisTtlMillis = redisTemplate.getExpire(key, TimeUnit.MILLISECONDS);
+
+                assertThat(redisTtlMillis).isNotNull().isPositive();
+                assertThat(redisTtlMillis).isBetween(
+                                Math.max(tokenRemainingMillis - 1_000L, 1L), tokenRemainingMillis + 1_000L);
+        }
+
+        private void assertAuthenticationKeysHavePositiveTtl() {
+                Set<String> refreshKeys = redisTemplate.keys("refreshToken*");
+                Set<String> blacklistKeys = redisTemplate.keys("accessTokenBlacklist*");
+
+                assertThat(refreshKeys).isNotNull();
+                assertThat(blacklistKeys).isNotNull();
+                java.util.stream.Stream.concat(refreshKeys.stream(), blacklistKeys.stream())
+                                .forEach(key -> assertThat(redisTemplate.getExpire(key, TimeUnit.MILLISECONDS))
+                                                .as("TTL for %s", key)
+                                                .isNotNull()
+                                                .isPositive());
         }
 
         private record Tokens(String accessToken, String refreshToken) {

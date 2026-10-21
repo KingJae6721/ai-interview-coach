@@ -158,7 +158,7 @@ class UserServiceTest {
         given(jwtProvider.createAccessToken(1L, com.aiinterview.user.entity.UserRole.USER))
                 .willReturn("mockedAccessToken");
         given(jwtProvider.createRefreshToken(1L)).willReturn("mockedRefreshToken");
-        given(jwtProvider.getRefreshExpirationSeconds()).willReturn(1209600L);
+        given(jwtProvider.getRemainingExpirationMillis("mockedRefreshToken")).willReturn(1209600000L);
 
         // when
         com.aiinterview.user.dto.LoginResponse response = userService.login(request);

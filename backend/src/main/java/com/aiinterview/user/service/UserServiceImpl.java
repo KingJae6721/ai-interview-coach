@@ -118,12 +118,7 @@ public class UserServiceImpl implements UserService {
         String refreshToken = jwtProvider.createRefreshToken(user.getId());
 
         // 5. RefreshToken Redis 저장
-        RefreshToken redisToken = RefreshToken.builder()
-                .userId(user.getId())
-                .token(refreshToken)
-                .ttl(jwtProvider.getRefreshExpirationSeconds())
-                .build();
-        refreshTokenRepository.save(redisToken);
+        saveRefreshToken(user.getId(), refreshToken);
 
         log.info("Login completed - userId: {}, email: {}", user.getId(), user.getEmail());
 
@@ -232,11 +227,7 @@ public class UserServiceImpl implements UserService {
         String newAccessToken = jwtProvider.createAccessToken(user.getId(), user.getRole());
         String newRefreshToken = jwtProvider.createRefreshToken(user.getId());
 
-        refreshTokenRepository.save(RefreshToken.builder()
-                .userId(userId)
-                .token(newRefreshToken)
-                .ttl(jwtProvider.getRefreshExpirationSeconds())
-                .build());
+        saveRefreshToken(userId, newRefreshToken);
 
         log.info("Reissue completed - userId: {}", userId);
 
@@ -273,6 +264,20 @@ public class UserServiceImpl implements UserService {
                 .build());
 
         log.info("Logout completed - userId: {}", userId);
+    }
+
+    private void saveRefreshToken(Long userId, String refreshToken) {
+        long remainingExpirationMillis = jwtProvider.getRemainingExpirationMillis(refreshToken);
+        if (remainingExpirationMillis <= 0) {
+            refreshTokenRepository.deleteById(userId);
+            return;
+        }
+
+        refreshTokenRepository.save(RefreshToken.builder()
+                .userId(userId)
+                .token(refreshToken)
+                .ttl(remainingExpirationMillis)
+                .build());
     }
 
     private String extractBearerToken(String authorizationHeader) {

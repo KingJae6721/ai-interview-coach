@@ -4,11 +4,6 @@ import lombok.AccessLevel;
 import lombok.Builder;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
-import org.springframework.data.annotation.Id;
-import org.springframework.data.redis.core.RedisHash;
-import org.springframework.data.redis.core.TimeToLive;
-
-import java.util.concurrent.TimeUnit;
 
 /**
  * Redis에 저장하는 로그아웃된 Access Token 정보.
@@ -17,13 +12,10 @@ import java.util.concurrent.TimeUnit;
  */
 @Getter
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
-@RedisHash(value = "accessTokenBlacklist")
 public class BlacklistedAccessToken {
 
-    @Id
     private String token;
 
-    @TimeToLive(unit = TimeUnit.MILLISECONDS)
     private Long ttl;
 
     @Builder
