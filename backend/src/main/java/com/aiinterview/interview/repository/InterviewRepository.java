@@ -7,6 +7,10 @@ import com.aiinterview.dashboard.dto.DashboardScoreTrendResponse;
 import com.aiinterview.dashboard.dto.DashboardAnalyticsProjection;
 import com.aiinterview.dashboard.dto.DashboardCategoryStatisticsProjection;
 import com.aiinterview.dashboard.dto.DashboardDifficultyStatisticsProjection;
+import com.aiinterview.admin.dto.AdminDashboardInterviewStatistics;
+import com.aiinterview.admin.dto.AdminInterviewListResponse;
+import com.aiinterview.admin.dto.AdminUserInterviewStatistics;
+import com.aiinterview.interview.entity.InterviewStatus;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.EntityGraph;
@@ -125,4 +129,70 @@ public interface InterviewRepository extends JpaRepository<Interview, Long> {
             where interview.id = :interviewId
             """)
     Optional<Interview> findWithUserAndJobPositionAndCompanyById(@Param("interviewId") Long interviewId);
+
+    @Query(value = """
+            select new com.aiinterview.admin.dto.AdminInterviewListResponse(
+                interview.id, interview.title, user.id, user.email, interview.status,
+                analysis.summary, count(distinct question), count(distinct answer),
+                interview.createdAt, interview.completedAt)
+            from Interview interview
+            join interview.user user
+            left join JobPostingAnalysis analysis on analysis.jobPosting = interview.jobPosting
+            left join InterviewQuestion question on question.interview = interview
+            left join InterviewAnswer answer on answer.interviewQuestion = question
+            where (:status is null or interview.status = :status)
+              and (:userEmail is null or lower(user.email) like lower(concat('%', :userEmail, '%')))
+            group by interview.id, interview.title, user.id, user.email, interview.status,
+                     analysis.summary, interview.createdAt, interview.completedAt
+            """,
+            countQuery = """
+            select count(interview)
+            from Interview interview
+            join interview.user user
+            where (:status is null or interview.status = :status)
+              and (:userEmail is null or lower(user.email) like lower(concat('%', :userEmail, '%')))
+            """)
+    Page<AdminInterviewListResponse> findAdminInterviews(
+            @Param("status") InterviewStatus status,
+            @Param("userEmail") String userEmail,
+            Pageable pageable);
+
+    @Query("""
+            select interview
+            from Interview interview
+            join fetch interview.user
+            left join fetch interview.jobPosting jobPosting
+            left join fetch jobPosting.jobPosition jobPosition
+            left join fetch jobPosition.company
+            left join fetch interview.resume
+            where interview.id = :interviewId
+            """)
+    Optional<Interview> findAdminDetailById(@Param("interviewId") Long interviewId);
+
+    @Query("""
+            select new com.aiinterview.admin.dto.AdminUserInterviewStatistics(
+                count(interview),
+                coalesce(sum(case when interview.status = com.aiinterview.interview.entity.InterviewStatus.READY then 1 else 0 end), 0),
+                coalesce(sum(case when interview.status = com.aiinterview.interview.entity.InterviewStatus.IN_PROGRESS then 1 else 0 end), 0),
+                coalesce(sum(case when interview.status = com.aiinterview.interview.entity.InterviewStatus.COMPLETED then 1 else 0 end), 0),
+                coalesce(sum(case when interview.status = com.aiinterview.interview.entity.InterviewStatus.CANCELLED then 1 else 0 end), 0))
+            from Interview interview
+            where interview.user.id = :userId
+            """)
+    AdminUserInterviewStatistics findAdminUserInterviewStatistics(@Param("userId") Long userId);
+
+    Optional<Interview> findFirstByUserIdOrderByCreatedAtDesc(Long userId);
+
+    @Query("""
+            select new com.aiinterview.admin.dto.AdminDashboardInterviewStatistics(
+                count(interview),
+                coalesce(sum(case when interview.status = com.aiinterview.interview.entity.InterviewStatus.READY then 1 else 0 end), 0),
+                coalesce(sum(case when interview.status = com.aiinterview.interview.entity.InterviewStatus.IN_PROGRESS then 1 else 0 end), 0),
+                coalesce(sum(case when interview.status = com.aiinterview.interview.entity.InterviewStatus.COMPLETED then 1 else 0 end), 0),
+                coalesce(sum(case when interview.status = com.aiinterview.interview.entity.InterviewStatus.CANCELLED then 1 else 0 end), 0),
+                coalesce(sum(case when interview.createdAt >= :todayStart then 1 else 0 end), 0))
+            from Interview interview
+            """)
+    AdminDashboardInterviewStatistics findAdminDashboardStatistics(
+            @Param("todayStart") java.time.LocalDateTime todayStart);
 }

@@ -1178,3 +1178,79 @@ The saved answer is used as the sole input for follow-up question generation.
   "message":"Resume Not Found"
 }
 ```
+# Admin Back Office API
+
+모든 관리자 API는 `Authorization: Bearer <accessToken>`을 요구하며, 현재 DB에서 `ADMIN` 권한을 가진 사용자만 접근할 수 있다. 일반 사용자는 `403 Forbidden`을 받는다.
+
+## 관리자 Dashboard
+
+```http
+GET /api/v1/admin/dashboard
+```
+
+응답에는 `totalUsers`, 상태별 면접 수, 오늘 생성된 면접 수와 최근 면접 10개가 포함된다. 집계는 DB count/aggregation query로 수행한다.
+
+## 관리자 사용자 목록
+
+```http
+GET /api/v1/admin/users?page=0&size=20&email=example&role=USER&status=ACTIVE
+```
+
+- 선택 필터: `email`, `role`, `status`
+- 기본 정렬: `createdAt DESC`
+- 응답: `userId`, `email`, `role`, `status`, `createdAt`, `interviewCount`
+- 비밀번호, 토큰, Resume 원문은 반환하지 않는다.
+
+## 관리자 사용자 상세
+
+```http
+GET /api/v1/admin/users/{userId}
+```
+
+사용자 기본 정보, 상태별 면접 수, 최근 면접을 반환한다. Resume 원문은 포함하지 않는다.
+
+## 사용자 권한 변경
+
+```http
+PATCH /api/v1/admin/users/{userId}/role
+Content-Type: application/json
+
+{
+  "role": "ADMIN"
+}
+```
+
+- 허용 값: `USER`, `ADMIN`
+- 동일 권한 요청은 멱등 성공하며 Audit Log를 추가하지 않는다.
+- 마지막 ADMIN을 USER로 강등하는 요청은 `LAST_ADMIN_DEMOTION_NOT_ALLOWED`로 거절한다.
+- 실제 변경과 Audit Log 저장은 하나의 트랜잭션으로 처리한다.
+
+## 관리자 면접 목록
+
+```http
+GET /api/v1/admin/interviews?page=0&size=20&status=COMPLETED&userEmail=example
+```
+
+- 선택 필터: `status`, `userEmail`
+- 기본 정렬: `createdAt DESC`
+- 질문 수와 답변된 질문 수는 DB 집계 결과를 반환한다.
+
+## 관리자 면접 상세
+
+```http
+GET /api/v1/admin/interviews/{interviewId}
+```
+
+면접·사용자·채용공고 요약·Resume 사용 여부와 질문별 답변/평가 존재 여부를 반환한다. Resume 원문과 Answer 원문은 반환하지 않는다.
+
+## 관리자 Audit Log
+
+```http
+GET /api/v1/admin/audit-logs?page=0&size=20&action=USER_ROLE_CHANGED&actorUserId=1&targetType=USER&fromDate=2026-01-01&toDate=2026-01-31
+```
+
+- 모든 필터는 선택 사항이다.
+- 날짜 범위는 양 끝 날짜를 포함한다.
+- Audit Log 수정/삭제 API는 제공하지 않는다.
+
+---

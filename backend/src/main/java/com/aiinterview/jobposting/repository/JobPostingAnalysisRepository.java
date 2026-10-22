@@ -31,4 +31,7 @@ public interface JobPostingAnalysisRepository extends JpaRepository<JobPostingAn
             order by analysis.analyzedAt desc
             """)
     List<JobPostingAnalysis> findAllWithJobPostingByUserId(@Param("userId") Long userId);
+
+    @Query("select analysis.summary from JobPostingAnalysis analysis where analysis.jobPosting.id = :jobPostingId")
+    Optional<String> findSummaryByJobPostingId(@Param("jobPostingId") Long jobPostingId);
 }

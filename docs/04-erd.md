@@ -14,6 +14,14 @@ Enum UserRole {
   ADMIN
 }
 
+Enum AdminAuditAction {
+  USER_ROLE_CHANGED
+}
+
+Enum AdminAuditTargetType {
+  USER
+}
+
 Enum InterviewStatus {
   READY
   IN_PROGRESS
@@ -78,6 +86,30 @@ Table companies {
 
   created_at timestamp
   updated_at timestamp
+}
+
+// =========================
+// ADMIN AUDIT LOG
+// =========================
+
+Table admin_audit_logs {
+  id bigint [pk, increment]
+
+  actor_user_id bigint [not null, ref: > users.id]
+  target_type AdminAuditTargetType [not null]
+  target_id bigint [not null]
+  action AdminAuditAction [not null]
+  before_value varchar(255) [not null]
+  after_value varchar(255) [not null]
+
+  created_at timestamp [not null]
+  updated_at timestamp [not null]
+}
+
+Indexes {
+  created_at [name: 'idx_admin_audit_logs_created_at']
+  actor_user_id [name: 'idx_admin_audit_logs_actor_user_id']
+  (target_type, target_id) [name: 'idx_admin_audit_logs_target']
 }
 
 // =========================

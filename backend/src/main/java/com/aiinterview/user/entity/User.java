@@ -73,6 +73,10 @@ public class User extends BaseEntity {
         this.password = password;
     }
 
+    public void changeRole(UserRole role) {
+        this.role = role;
+    }
+
     /**
      * 회원 탈퇴(Soft Delete) 처리를 진행합니다.
      */
