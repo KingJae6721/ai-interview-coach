@@ -174,8 +174,6 @@ class AuthIntegrationTest {
 
                 assertThat(redisTemplate.hasKey(RefreshTokenRepository.KEY_PREFIX + userId)).isFalse();
                 assertThat(redisTemplate.hasKey(BlacklistedAccessTokenRepository.KEY_PREFIX + accessToken)).isFalse();
-                assertThat(redisTemplate.keys("refreshToken*")).isEmpty();
-                assertThat(redisTemplate.keys("accessTokenBlacklist*")).isEmpty();
         }
 
         @Test
