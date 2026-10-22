@@ -29,7 +29,7 @@ public interface UserRepository extends JpaRepository<User, Long> {
                 user.id, user.email, user.role, user.status, user.createdAt, count(interview))
             from User user
             left join Interview interview on interview.user = user
-            where (:email is null or lower(user.email) like lower(concat('%', :email, '%')))
+            where (:email = '' or lower(user.email) like lower(concat('%', :email, '%')))
               and (:role is null or user.role = :role)
               and (:status is null or user.status = :status)
             group by user.id, user.email, user.role, user.status, user.createdAt
@@ -37,7 +37,7 @@ public interface UserRepository extends JpaRepository<User, Long> {
             countQuery = """
             select count(user)
             from User user
-            where (:email is null or lower(user.email) like lower(concat('%', :email, '%')))
+            where (:email = '' or lower(user.email) like lower(concat('%', :email, '%')))
               and (:role is null or user.role = :role)
               and (:status is null or user.status = :status)
             """)

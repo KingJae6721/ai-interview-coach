@@ -169,7 +169,7 @@ public class AdminServiceImpl implements AdminService {
         Pageable recentPage = PageRequest.of(
                 0, RECENT_INTERVIEW_LIMIT, Sort.by(Sort.Direction.DESC, "createdAt"));
         List<AdminInterviewListResponse> recentInterviews = interviewRepository
-                .findAdminInterviews(null, null, recentPage)
+                .findAdminInterviews(null, "", recentPage)
                 .getContent();
 
         return new AdminDashboardResponse(
@@ -206,7 +206,7 @@ public class AdminServiceImpl implements AdminService {
     }
 
     private String normalizeSearchTerm(String searchTerm) {
-        return StringUtils.hasText(searchTerm) ? searchTerm.trim() : null;
+        return StringUtils.hasText(searchTerm) ? searchTerm.trim() : "";
     }
 
     private List<AdminInterviewQuestionResponse> orderQuestions(

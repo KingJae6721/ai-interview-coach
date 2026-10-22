@@ -19,8 +19,8 @@ public interface AdminAuditLogRepository extends JpaRepository<AdminAuditLog, Lo
             where (:action is null or auditLog.action = :action)
               and (:actorUserId is null or auditLog.actorUserId = :actorUserId)
               and (:targetType is null or auditLog.targetType = :targetType)
-              and (:fromDateTime is null or auditLog.createdAt >= :fromDateTime)
-              and (:toDateTime is null or auditLog.createdAt < :toDateTime)
+              and (cast(:fromDateTime as LocalDateTime) is null or auditLog.createdAt >= :fromDateTime)
+              and (cast(:toDateTime as LocalDateTime) is null or auditLog.createdAt < :toDateTime)
             """)
     Page<AdminAuditLog> findAdminAuditLogs(
             @Param("action") AdminAuditAction action,

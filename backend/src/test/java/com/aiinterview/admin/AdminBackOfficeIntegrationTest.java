@@ -26,6 +26,7 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.http.MediaType;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
@@ -91,6 +92,9 @@ class AdminBackOfficeIntegrationTest {
     @Autowired
     private JwtProvider jwtProvider;
 
+    @Autowired
+    private JdbcTemplate jdbcTemplate;
+
     @MockitoBean
     private BlacklistedAccessTokenRepository blacklistedAccessTokenRepository;
 
@@ -127,6 +131,42 @@ class AdminBackOfficeIntegrationTest {
                         .header("Authorization", bearer(admin)))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.success").value(true));
+    }
+
+    @Test
+    void freshDatabaseAppliesFlywayV1AndV2WithExpectedAuditSchema() {
+        assertThat(jdbcTemplate.queryForList(
+                "select version from flyway_schema_history where success order by installed_rank",
+                String.class))
+                .containsExactly("1", "2");
+
+        assertThat(jdbcTemplate.queryForObject(
+                "select to_regclass('public.admin_audit_logs')::text", String.class))
+                .isEqualTo("admin_audit_logs");
+        assertThat(jdbcTemplate.queryForObject("""
+                select count(*)
+                from information_schema.columns
+                where table_schema = 'public'
+                  and table_name = 'admin_audit_logs'
+                  and is_nullable = 'YES'
+                """, Integer.class)).isZero();
+        assertThat(jdbcTemplate.queryForObject("""
+                select count(*)
+                from pg_constraint
+                where conrelid = 'public.admin_audit_logs'::regclass
+                  and contype = 'f'
+                  and pg_get_constraintdef(oid) like '%users(id)%'
+                """, Integer.class)).isEqualTo(1);
+        assertThat(jdbcTemplate.queryForList("""
+                select indexname
+                from pg_indexes
+                where schemaname = 'public'
+                  and tablename = 'admin_audit_logs'
+                """, String.class))
+                .contains(
+                        "idx_admin_audit_logs_created_at",
+                        "idx_admin_audit_logs_actor_user_id",
+                        "idx_admin_audit_logs_target");
     }
 
     @Test

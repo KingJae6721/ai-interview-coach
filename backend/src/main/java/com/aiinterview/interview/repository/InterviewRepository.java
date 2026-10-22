@@ -141,7 +141,7 @@ public interface InterviewRepository extends JpaRepository<Interview, Long> {
             left join InterviewQuestion question on question.interview = interview
             left join InterviewAnswer answer on answer.interviewQuestion = question
             where (:status is null or interview.status = :status)
-              and (:userEmail is null or lower(user.email) like lower(concat('%', :userEmail, '%')))
+              and (:userEmail = '' or lower(user.email) like lower(concat('%', :userEmail, '%')))
             group by interview.id, interview.title, user.id, user.email, interview.status,
                      analysis.summary, interview.createdAt, interview.completedAt
             """,
@@ -150,7 +150,7 @@ public interface InterviewRepository extends JpaRepository<Interview, Long> {
             from Interview interview
             join interview.user user
             where (:status is null or interview.status = :status)
-              and (:userEmail is null or lower(user.email) like lower(concat('%', :userEmail, '%')))
+              and (:userEmail = '' or lower(user.email) like lower(concat('%', :userEmail, '%')))
             """)
     Page<AdminInterviewListResponse> findAdminInterviews(
             @Param("status") InterviewStatus status,
