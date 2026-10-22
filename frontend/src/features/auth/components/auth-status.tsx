@@ -69,6 +69,14 @@ export function AuthStatus({
               대시보드
             </Link>
           )}
+          {user.role === "ADMIN" && (
+            <Link
+              href="/admin"
+              className="rounded-lg border border-violet-300 px-5 py-2.5 text-sm font-medium text-violet-700 hover:bg-violet-50"
+            >
+              관리자
+            </Link>
+          )}
           <button
             type="button"
             onClick={handleLogout}
