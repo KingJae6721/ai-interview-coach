@@ -18,18 +18,10 @@ The application runs Flyway automatically before Hibernate validation. Productio
 
 ### Existing non-Flyway database conversion
 
-This is a separate maintenance procedure and must not be used for the empty production database. `baseline version 0` is unsafe: Flyway would record version `0` and then execute V1, whose `CREATE TABLE` statements conflict with the existing tables.
-
-For a populated Hibernate-managed database:
-
-1. Back up the database and stop application writes.
-2. Compare its schema with `V1__initial_schema.sql`, including columns, types, nullability, foreign keys, unique/check constraints, and identity sequences. Apply reviewed corrective/manual migrations first if they differ.
-3. Start the application once with `SPRING_FLYWAY_ENABLED=false`. The normal `ddl-auto=validate` must succeed; stop the application afterward. This validation does not replace the explicit constraint/index comparison in step 2.
-4. Only after equivalence is confirmed, perform one controlled startup with `SPRING_FLYWAY_BASELINE_ON_MIGRATE=true` and `SPRING_FLYWAY_BASELINE_VERSION=1`. Because the schema is non-empty, Flyway records V1 as the baseline and does not execute the V1 `CREATE TABLE` statements.
-5. Stop that instance, remove both temporary baseline variables, and restart normally with `baseline-on-migrate=false`.
-6. Confirm `flyway_schema_history` contains a successful baseline at version `1`. Future migrations must start at V2 or later.
-
-Never leave `SPRING_FLYWAY_BASELINE_ON_MIGRATE=true` in a persistent environment, and never use `docker compose down -v` as a migration procedure.
+This is a separate maintenance procedure and must not be used for an empty production database.
+Follow [11-flyway-legacy-database-migration.md](./11-flyway-legacy-database-migration.md).
+The controlled baseline version is `1`; version `0`, `ddl-auto=update`, volume deletion, and
+schema-equivalence checks without a clone are prohibited.
 
 ## 2. Prepare managed Redis
 

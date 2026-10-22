@@ -1,0 +1,50 @@
+name: ai-interview-e2e
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: ai_interview_e2e
+      POSTGRES_USER: e2e_admin
+      POSTGRES_PASSWORD: e2e-admin-password-not-for-production
+      POSTGRES_APP_USER: e2e_app
+      POSTGRES_APP_PASSWORD: e2e-app-password-not-for-production
+    ports:
+      - "127.0.0.1:55432:5432"
+    tmpfs:
+      - /var/lib/postgresql/data
+    volumes:
+      - ../../docker/initdb:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U e2e_admin -d ai_interview_e2e"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+
+  redis:
+    image: redis:7-alpine
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+
+  backend:
+    build:
+      context: ../../backend
+    environment:
+      DB_URL: jdbc:postgresql://postgres:5432/ai_interview_e2e
+      DB_USERNAME: e2e_app
+      DB_PASSWORD: e2e-app-password-not-for-production
+      REDIS_URL: redis://redis:6379
+      JWT_SECRET: cGxheXdyaWdodC1lMmUtdGVzdC1qd3Qtc2VjcmV0LWtleS0zMi1ieXRlcw==
+      AI_PROVIDER: groq
+      CORS_ALLOWED_ORIGINS: http://127.0.0.1:13000
+      SPRINGDOC_ENABLED: "false"
+    ports:
+      - "127.0.0.1:18081:8081"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
